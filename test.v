@@ -1,85 +1,114 @@
 module test(
     input clk,
-    input clr,          // 假定为低电平有效 (根据原代码 negedge)
-    output reg [6:0] LED7S,  // 修正为标准 [6:0] 格式，个位秒（手动译码）
-    output reg [3:0] LED7S2, // 十位秒（BCD）
-    output reg [3:0] LED7S3, // 个位分（BCD）
-    output reg [3:0] LED7S4, // 十位分（BCD）
-    output reg [3:0] LED7S5, // 个位时（BCD）
-    output reg [3:0] LED7S6  // 十位时（BCD）
+    input clr,
+    output reg [6:0] LED7S,
+    output reg [3:0] LED7S2,
+    output reg [3:0] LED7S3,
+    output reg [3:0] LED7S4,
+    output reg [3:0] LED7S5,
+    output reg [3:0] LED7S6
 );
 
-    reg [5:0] sec;
-    reg [5:0] min;
-    reg [4:0] hour;
+    // 最小位宽 BCD 计数器
+    reg [3:0] sec_l;   // 秒个位 0-9 (4位)
+    reg [2:0] sec_h;   // 秒十位 0-5 (3位)
+    reg [3:0] min_l;   // 分个位 0-9 (4位)
+    reg [2:0] min_h;   // 分十位 0-5 (3位)
+    reg [3:0] hour_l;  // 时个位 0-9 (4位)
+    reg [1:0] hour_h;  // 时十位 0-2 (2位)
+    // 总计: 4+3+4+3+4+2 = 20 位寄存器
+
+    // 进位信号 (组合逻辑)
+    wire sec_l_max, sec_h_max, min_l_max, min_h_max, hour_max;
     
-    // 用于辅助译码的临时变量
-    reg [3:0] sec_unit_val; 
+    assign sec_l_max = (sec_l == 4'b1001);
+    assign sec_h_max = (sec_h == 3'b101);
+    assign min_l_max = (min_l == 4'b1001);
+    assign min_h_max = (min_h == 3'b101);
+    assign hour_max  = (hour_h == 2'b10) & (hour_l == 4'b0011);
 
     // ==========================================
-    // 1. 时钟计数与复位逻辑 (Clock and Reset)
+    // 时钟计数逻辑 (级联计数器)
     // ==========================================
     always @(posedge clk or negedge clr) begin
         if (!clr) begin
-            // 异步复位：按下复位键时清零
-            sec <= 0;
-            min <= 0;
-            hour <= 0;
+            sec_l  <= 4'b0000;
+            sec_h  <= 3'b000;
+            min_l  <= 4'b0000;
+            min_h  <= 3'b000;
+            hour_l <= 4'b0000;
+            hour_h <= 2'b00;
         end
         else begin
-            // 正常计数逻辑
-            if (sec >= 59) begin
-                sec <= 0;
-                if (min >= 59) begin
-                    min <= 0;
-                    if (hour >= 23)
-                        hour <= 0;
-                    else
-                        hour <= hour + 1;
+            // 秒个位
+            if (sec_l_max)
+                sec_l <= 4'b0000;
+            else
+                sec_l <= sec_l + 1'b1;
+            
+            // 秒十位
+            if (sec_l_max) begin
+                if (sec_h_max)
+                    sec_h <= 3'b000;
+                else
+                    sec_h <= sec_h + 1'b1;
+            end
+            
+            // 分个位
+            if (sec_l_max & sec_h_max) begin
+                if (min_l_max)
+                    min_l <= 4'b0000;
+                else
+                    min_l <= min_l + 1'b1;
+            end
+            
+            // 分十位
+            if (sec_l_max & sec_h_max & min_l_max) begin
+                if (min_h_max)
+                    min_h <= 3'b000;
+                else
+                    min_h <= min_h + 1'b1;
+            end
+            
+            // 时个位和十位
+            if (sec_l_max & sec_h_max & min_l_max & min_h_max) begin
+                if (hour_max) begin
+                    hour_l <= 4'b0000;
+                    hour_h <= 2'b00;
+                end
+                else if (hour_l == 4'b1001) begin
+                    hour_l <= 4'b0000;
+                    hour_h <= hour_h + 1'b1;
                 end
                 else begin
-                    min <= min + 1;
+                    hour_l <= hour_l + 1'b1;
                 end
-            end
-            else begin
-                sec <= sec + 1;
             end
         end
     end
 
     // ==========================================
-    // 2. 数位分离与输出逻辑 (Output Process)
+    // 输出赋值
     // ==========================================
     always @(*) begin
-        // --- 数位分离部分 (完成你的任务1) ---
-        
-        // 秒 (sec)
-        sec_unit_val = sec % 10;     // 取模得个位
-        LED7S2       = sec / 10;     // 除法得十位
-        
-        // 分 (min)
-        LED7S3       = min % 10;     // 个位
-        LED7S4       = min / 10;     // 十位
-        
-        // 时 (hour)
-        LED7S5       = hour % 10;    // 个位
-        LED7S6       = hour / 10;    // 十位
+        LED7S2 = {1'b0, sec_h};
+        LED7S3 = min_l;
+        LED7S4 = {1'b0, min_h};
+        LED7S5 = hour_l;
+        LED7S6 = {2'b00, hour_h};
 
-        // --- 手动译码部分 (针对秒的个位) ---
-        // 假设是共阴极还是共阳极取决于硬件，这里沿用你提供的编码
-        // 4'b0000 -> 7'b1111110 (0x7E, 看起来像共阴极的高电平点亮，或者是共阳极的低电平有效)
-        case (sec_unit_val)
-			4'd0: LED7S <= 7'b0111111; // 0: a,b,c,d,e,f 亮
-            4'd1: LED7S <= 7'b0000110; // 1: b,c 亮
-            4'd2: LED7S <= 7'b1011011; // 2: a,b,d,e,g 亮
-            4'd3: LED7S <= 7'b1001111; // 3: a,b,c,d,g 亮
-            4'd4: LED7S <= 7'b1100110; // 4: b,c,f,g 亮
-            4'd5: LED7S <= 7'b1101101; // 5: a,c,d,f,g 亮
-            4'd6: LED7S <= 7'b1111100; // 6: c,d,e,f,g 亮
-            4'd7: LED7S <= 7'b0000111; // 7: a,b,c 亮
-            4'd8: LED7S <= 7'b1111111; // 8: 全亮
-            4'd9: LED7S <= 7'b1100111; // 9: a,b,c,f,g 亮
-			default: LED7S <= 7'b0000000;
+        case (sec_l)
+            4'b0000: LED7S = 7'b0111111;
+            4'b0001: LED7S = 7'b0000110;
+            4'b0010: LED7S = 7'b1011011;
+            4'b0011: LED7S = 7'b1001111;
+            4'b0100: LED7S = 7'b1100110;
+            4'b0101: LED7S = 7'b1101101;
+            4'b0110: LED7S = 7'b1111100;
+            4'b0111: LED7S = 7'b0000111;
+            4'b1000: LED7S = 7'b1111111;
+            4'b1001: LED7S = 7'b1100111;
+            default: LED7S = 7'b0000000;
         endcase
     end
 
