@@ -1,0 +1,51 @@
+# ==============================================================================
+# TEC-8 数字电子钟 引脚分配文件
+# 芯片: ALTERA EPM7128
+# 文件: pin_assignments.qsf
+# 使用方法: Quartus II -> Assignments -> Import Assignments
+# ==============================================================================
+
+# 时钟和复位信号
+set_location_assignment PIN_58 -to clk
+set_location_assignment PIN_54 -to clr
+
+# LED7S - 秒个位七段显示 (PIN_51 ~ PIN_44)
+set_location_assignment PIN_51 -to LED7S[6]
+set_location_assignment PIN_50 -to LED7S[5]
+set_location_assignment PIN_49 -to LED7S[4]
+set_location_assignment PIN_48 -to LED7S[3]
+set_location_assignment PIN_46 -to LED7S[2]
+set_location_assignment PIN_45 -to LED7S[1]
+set_location_assignment PIN_44 -to LED7S[0]
+
+# LED7S2 - 秒十位 BCD输出 (PIN_41 ~ PIN_37)
+set_location_assignment PIN_41 -to LED7S2[3]
+set_location_assignment PIN_40 -to LED7S2[2]
+set_location_assignment PIN_39 -to LED7S2[1]
+set_location_assignment PIN_37 -to LED7S2[0]
+
+# LED7S3 - 分个位 BCD输出 (PIN_18, PIN_17, PIN_36, PIN_35)
+set_location_assignment PIN_18 -to LED7S3[3]
+set_location_assignment PIN_17 -to LED7S3[2]
+set_location_assignment PIN_36 -to LED7S3[1]
+set_location_assignment PIN_35 -to LED7S3[0]
+
+# LED7S4 - 分十位 BCD输出 (PIN_34 ~ PIN_30)
+set_location_assignment PIN_34 -to LED7S4[3]
+set_location_assignment PIN_33 -to LED7S4[2]
+set_location_assignment PIN_31 -to LED7S4[1]
+set_location_assignment PIN_30 -to LED7S4[0]
+
+# LED7S5 - 时个位 BCD输出 (PIN_29 ~ PIN_25)
+set_location_assignment PIN_29 -to LED7S5[3]
+set_location_assignment PIN_28 -to LED7S5[2]
+set_location_assignment PIN_27 -to LED7S5[1]
+set_location_assignment PIN_25 -to LED7S5[0]
+
+# LED7S6 - 时十位 BCD输出 (PIN_24 ~ PIN_20)
+set_location_assignment PIN_24 -to LED7S6[3]
+set_location_assignment PIN_22 -to LED7S6[2]
+set_location_assignment PIN_21 -to LED7S6[1]
+set_location_assignment PIN_20 -to LED7S6[0]
+
+# ==============================================================================
