@@ -7,7 +7,11 @@
 
 # 时钟和复位信号
 set_location_assignment PIN_58 -to clk
+set_location_assignment PIN_57 -to clk_audio
 set_location_assignment PIN_54 -to clr
+
+# 整点报时蜂鸣器输出 (LG1-D7/SPEAKER)
+set_location_assignment PIN_52 -to beep
 
 # LED7S - 秒个位七段显示 (PIN_51 ~ PIN_44)
 set_location_assignment PIN_51 -to LED7S[6]

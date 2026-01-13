@@ -1,13 +1,20 @@
 module test(
     input clk,
+    input clk_audio,          // 音频时钟 CP2(PIN_57): 1KHz/100Hz
     input clr,
     output reg [6:0] LED7S,
     output reg [3:0] LED7S2,
     output reg [3:0] LED7S3,
     output reg [3:0] LED7S4,
     output reg [3:0] LED7S5,
-    output reg [3:0] LED7S6
+    output reg [3:0] LED7S6,
+    output beep               // 扬声器输出 PIN_52 (改为wire)
 );
+
+    // 报时使能信号
+    reg beep_en;
+    // 蜂鸣器输出 = 使能信号 AND 音频时钟
+    assign beep = beep_en & clk_audio;
 
     // 最小位宽 BCD 计数器
     reg [3:0] sec_l;   // 秒个位 0-9 (4位)
@@ -110,6 +117,26 @@ module test(
             4'b1001: LED7S = 7'b1100111;
             default: LED7S = 7'b0000000;
         endcase
+        
+        // 整点报时逻辑 (测试模式：每分钟报时)
+        // 秒=50~58: 预报（间隔响）
+        // 秒=59: 过渡
+        // 秒=00~04: 正点连续响5秒
+        if (sec_h == 3'b101 && sec_l >= 4'b0000 && sec_l <= 4'b1000) begin
+            // 50-58秒：预报阶段，偶数秒响
+            beep_en = ~sec_l[0];
+        end
+        else if (sec_h == 3'b101 && sec_l == 4'b1001) begin
+            // 59秒：响
+            beep_en = 1'b1;
+        end
+        else if (sec_h == 3'b000 && sec_l <= 4'b0100) begin
+            // 00-04秒：正点连续响5秒
+            beep_en = 1'b1;
+        end
+        else begin
+            beep_en = 1'b0;
+        end
     end
 
 endmodule
