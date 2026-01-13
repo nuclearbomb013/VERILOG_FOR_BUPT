@@ -1,142 +1,184 @@
 module test(
-    input clk,
-    input clk_audio,          // 音频时钟 CP2(PIN_57): 1KHz/100Hz
-    input clr,
+    input clk,            // 1Hz 秒时钟 (控制总时长)
+    input clk_audio,      // 1000Hz 音频时钟 (控制嘀嘀嘀的节奏)
+    input clr,            // 复位信号
     output reg [6:0] LED7S,
-    output reg [3:0] LED7S2,
-    output reg [3:0] LED7S3,
-    output reg [3:0] LED7S4,
-    output reg [3:0] LED7S5,
-    output reg [3:0] LED7S6,
-    output beep               // 扬声器输出 PIN_52 (改为wire)
+    output [3:0] LED7S2,
+    output [3:0] LED7S3,
+    output [3:0] LED7S4,
+    output [3:0] LED7S5,
+    output [3:0] LED7S6,
+    output beep
 );
 
-    // 报时使能信号
-    reg beep_en;
-    // 蜂鸣器输出 = 使能信号 AND 音频时钟
-    assign beep = beep_en & clk_audio;
-
-    // 最小位宽 BCD 计数器
-    reg [3:0] sec_l;   // 秒个位 0-9 (4位)
-    reg [2:0] sec_h;   // 秒十位 0-5 (3位)
-    reg [3:0] min_l;   // 分个位 0-9 (4位)
-    reg [2:0] min_h;   // 分十位 0-5 (3位)
-    reg [3:0] hour_l;  // 时个位 0-9 (4位)
-    reg [1:0] hour_h;  // 时十位 0-2 (2位)
-    // 总计: 4+3+4+3+4+2 = 20 位寄存器
-
-    // 进位信号 (组合逻辑)
-    wire sec_l_max, sec_h_max, min_l_max, min_h_max, hour_max;
+    // ==========================================
+    // 1. 基础时间寄存器
+    // ==========================================
+    reg [3:0] sec_l;
+    reg [2:0] sec_h;
+    reg [3:0] min_l;
+    reg [2:0] min_h;
+    reg [3:0] hour_l;
+    reg [1:0] hour_h;
     
-    assign sec_l_max = (sec_l == 4'b1001);
-    assign sec_h_max = (sec_h == 3'b101);
-    assign min_l_max = (min_l == 4'b1001);
-    assign min_h_max = (min_h == 3'b101);
-    assign hour_max  = (hour_h == 2'b10) & (hour_l == 4'b0011);
+    // 开机计时器 (用于开机前几秒的判断)
+    reg [2:0] start_cnt; 
+
+    // 端口连接
+    assign LED7S2 = {1'b0, sec_h};
+    assign LED7S3 = min_l;
+    assign LED7S4 = {1'b0, min_h};
+    assign LED7S5 = hour_l;
+    assign LED7S6 = {2'b00, hour_h};
 
     // ==========================================
-    // 时钟计数逻辑 (级联计数器)
+    // 2. 计数器使能逻辑 (进位链)
+    // ==========================================
+    wire en_sec_h, en_min_l, en_min_h, en_hour_l;
+    
+    assign en_sec_h  = (sec_l == 4'd9);
+    assign en_min_l  = (sec_h == 3'd5) && en_sec_h;
+    assign en_min_h  = (min_l == 4'd9) && en_min_l;
+    assign en_hour_l = (min_h == 3'd5) && en_min_h;
+    
+    wire hour_reset; 
+    assign hour_reset = (hour_h == 2'd2 && hour_l == 4'd3);
+
+    // ==========================================
+    // 3. 时间走字逻辑 (保持不变)
     // ==========================================
     always @(posedge clk or negedge clr) begin
-        if (!clr) begin
-            sec_l  <= 4'b0000;
-            sec_h  <= 3'b000;
-            min_l  <= 4'b0000;
-            min_h  <= 3'b000;
-            hour_l <= 4'b0000;
-            hour_h <= 2'b00;
-        end
-        else begin
-            // 秒个位
-            if (sec_l_max)
-                sec_l <= 4'b0000;
-            else
-                sec_l <= sec_l + 1'b1;
-            
-            // 秒十位
-            if (sec_l_max) begin
-                if (sec_h_max)
-                    sec_h <= 3'b000;
-                else
-                    sec_h <= sec_h + 1'b1;
-            end
-            
-            // 分个位
-            if (sec_l_max & sec_h_max) begin
-                if (min_l_max)
-                    min_l <= 4'b0000;
-                else
-                    min_l <= min_l + 1'b1;
-            end
-            
-            // 分十位
-            if (sec_l_max & sec_h_max & min_l_max) begin
-                if (min_h_max)
-                    min_h <= 3'b000;
-                else
-                    min_h <= min_h + 1'b1;
-            end
-            
-            // 时个位和十位
-            if (sec_l_max & sec_h_max & min_l_max & min_h_max) begin
-                if (hour_max) begin
-                    hour_l <= 4'b0000;
-                    hour_h <= 2'b00;
-                end
-                else if (hour_l == 4'b1001) begin
-                    hour_l <= 4'b0000;
-                    hour_h <= hour_h + 1'b1;
-                end
-                else begin
-                    hour_l <= hour_l + 1'b1;
-                end
-            end
-        end
+        if (!clr) sec_l <= 4'd0;
+        else case (sec_l)
+            4'd9:    sec_l <= 4'd0;
+            default: sec_l <= sec_l + 1'b1;
+        endcase
+    end
+
+    always @(posedge clk or negedge clr) begin
+        if (!clr) sec_h <= 3'd0;
+        else if (en_sec_h) case (sec_h)
+            3'd5:    sec_h <= 3'd0;
+            default: sec_h <= sec_h + 1'b1;
+        endcase
+    end
+
+    always @(posedge clk or negedge clr) begin
+        if (!clr) min_l <= 4'd0;
+        else if (en_min_l) case (min_l)
+            4'd9:    min_l <= 4'd0;
+            default: min_l <= min_l + 1'b1;
+        endcase
+    end
+
+    always @(posedge clk or negedge clr) begin
+        if (!clr) min_h <= 3'd0;
+        else if (en_min_h) case (min_h)
+            3'd5:    min_h <= 3'd0;
+            default: min_h <= min_h + 1'b1;
+        endcase
+    end
+
+    always @(posedge clk or negedge clr) begin
+        if (!clr) hour_l <= 4'd0;
+        else if (en_hour_l) case (1'b1) 
+            hour_reset:       hour_l <= 4'd0;
+            (hour_l == 4'd9): hour_l <= 4'd0;
+            default:          hour_l <= hour_l + 1'b1;
+        endcase
+    end
+
+    always @(posedge clk or negedge clr) begin
+        if (!clr) hour_h <= 2'd0;
+        else if (en_hour_l) case (1'b1)
+            hour_reset:       hour_h <= 2'd0;
+            (hour_l == 4'd9): hour_h <= hour_h + 1'b1;
+            default:          hour_h <= hour_h;
+        endcase
+    end
+
+    // 开机计数器 (数到3就停，足够覆盖开机那2秒)
+    always @(posedge clk or negedge clr) begin
+        if (!clr) start_cnt <= 3'd0;
+        else if (start_cnt < 3'd3) start_cnt <= start_cnt + 1'b1;
     end
 
     // ==========================================
-    // 输出赋值
+    // 4. 显示译码 (保持不变)
     // ==========================================
     always @(*) begin
-        LED7S2 = {1'b0, sec_h};
-        LED7S3 = min_l;
-        LED7S4 = {1'b0, min_h};
-        LED7S5 = hour_l;
-        LED7S6 = {2'b00, hour_h};
-
         case (sec_l)
-            4'b0000: LED7S = 7'b0111111;
-            4'b0001: LED7S = 7'b0000110;
-            4'b0010: LED7S = 7'b1011011;
-            4'b0011: LED7S = 7'b1001111;
-            4'b0100: LED7S = 7'b1100110;
-            4'b0101: LED7S = 7'b1101101;
-            4'b0110: LED7S = 7'b1111100;
-            4'b0111: LED7S = 7'b0000111;
-            4'b1000: LED7S = 7'b1111111;
-            4'b1001: LED7S = 7'b1100111;
+            4'h0: LED7S = 7'b0111111; 4'h1: LED7S = 7'b0000110;
+            4'h2: LED7S = 7'b1011011; 4'h3: LED7S = 7'b1001111;
+            4'h4: LED7S = 7'b1100110; 4'h5: LED7S = 7'b1101101;
+            4'h6: LED7S = 7'b1111100; 4'h7: LED7S = 7'b0000111;
+            4'h8: LED7S = 7'b1111111; 4'h9: LED7S = 7'b1100111;
             default: LED7S = 7'b0000000;
         endcase
-        
-        // 整点报时逻辑 (测试模式：每分钟报时)
-        // 秒=50~58: 预报（间隔响）
-        // 秒=59: 过渡
-        // 秒=00~04: 正点连续响5秒
-        if (sec_h == 3'b101 && sec_l >= 4'b0000 && sec_l <= 4'b1000) begin
-            // 50-58秒：预报阶段，偶数秒响
-            beep_en = ~sec_l[0];
+    end
+
+    // ==========================================
+    // 5. 高级蜂鸣器逻辑 (毫秒级控制)
+    // ==========================================
+
+    // [Step A] 定义触发窗口：什么时候允许响？
+    // 需求：开机前2秒 (0,1) 或 整点前2秒 (0,1)
+    reg beep_window;
+    always @(*) begin
+        // 1. 开机自检 (start_cnt 为 0 或 1 时)
+        if (start_cnt < 3'd2) 
+            beep_window = 1'b1;
+            
+        // 2. 整点报时 (分=00, 秒=00或01, 且开机自检已结束)
+        else if (min_h == 0 && min_l == 0 && sec_h == 0 && sec_l <= 1)
+            beep_window = 1'b1;
+            
+        else 
+            beep_window = 1'b0;
+    end
+
+    // [Step B] 毫秒计数器 (由 1000Hz 音频时钟驱动)
+    // 0~999 循环计数，用来切分每一秒
+    reg [9:0] ms_cnt; 
+    
+    always @(posedge clk_audio or negedge clr) begin
+        if (!clr) begin
+            ms_cnt <= 10'd0;
         end
-        else if (sec_h == 3'b101 && sec_l == 4'b1001) begin
-            // 59秒：响
-            beep_en = 1'b1;
-        end
-        else if (sec_h == 3'b000 && sec_l <= 4'b0100) begin
-            // 00-04秒：正点连续响5秒
-            beep_en = 1'b1;
+        else if (beep_window) begin
+            // 在窗口期内，0-999 循环计数
+            if (ms_cnt >= 10'd999) 
+                ms_cnt <= 10'd0;
+            else 
+                ms_cnt <= ms_cnt + 1'b1;
         end
         else begin
-            beep_en = 1'b0;
+            // 窗口外复位，保证下次响的时候从头开始
+            ms_cnt <= 10'd0; 
         end
     end
+
+    // [Step C] 生成“嘀嘀嘀”节奏
+    // 频率 1000Hz -> 1个计数 = 1ms
+    // 目标：每秒 3 次
+    reg rhythm;
+    always @(*) begin
+        // 第1声: 0-100ms
+        if (ms_cnt < 100) 
+            rhythm = 1'b1;
+        // 第2声: 200-300ms
+        else if (ms_cnt >= 200 && ms_cnt < 300) 
+            rhythm = 1'b1;
+        // 第3声: 400-500ms
+        else if (ms_cnt >= 400 && ms_cnt < 500) 
+            rhythm = 1'b1;
+        // 剩下时间 (500-999ms) 静音
+        else 
+            rhythm = 1'b0;
+    end
+
+    // [Step D] 最终输出
+    // 只有在 窗口期 + 节奏为High + 音频时钟震荡 时才响
+    assign beep = beep_window & rhythm & clk_audio;
 
 endmodule
