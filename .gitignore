@@ -1,0 +1,9 @@
+db/
+
+*.rpt
+*.done
+*.summary
+*.pin
+*.pof
+*.qsf
+*.bak
