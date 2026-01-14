@@ -52,12 +52,12 @@ module main(
     end
 
     // ==========================================
-    // 模式切换部分
+    // 模式切换
     // ==========================================
 
 
     // 当前模式
-    // 0: 秒表模式
+    // 0: 电子钟模式
     // 1: 校时模式
     // 2: 闹钟模式
     // 3: 秒表模式
@@ -65,6 +65,189 @@ module main(
                     switch_alarm    ? 2'd2 :
                     switch_setting  ? 2'd1 : 2'd0;       
 
+    // ==========================================
+    // 电子钟逻辑
+    // ==========================================
+
+    reg [3:0] clock_sec_l;
+    reg [2:0] clock_sec_h;
+    reg [3:0] clock_min_l;
+    reg [2:0] clock_min_h;
+    reg [3:0] clock_hour_l;
+    reg [1:0] clock_hour_h;
+    
+    
+    //alarm_beep_enable
+    reg [1:0] alarm_beep_enable;
+    
+    
+    
+
+    wire en_clock_sec_h, en_clock_min_l, en_clock_min_h, en_clock_hour_l;
+    
+    assign en_clock_sec_h  = (clock_sec_l == 4'd9);
+    assign en_clock_min_l  = (clock_sec_h == 3'd5) && en_clock_sec_h;
+    assign en_clock_min_h  = (clock_min_l == 4'd9) && en_clock_min_l;
+    assign en_clock_hour_l = (clock_min_h == 3'd5) && en_clock_min_h;
+    
+    wire hour_reset; 
+    assign hour_reset = (clock_hour_h == 2'd2 && clock_hour_l == 4'd3);
+
+    // 时间走字逻辑 
+    always @(posedge clk_1hz or negedge switch_clr) begin
+        if (!switch_clr) clock_sec_l <= 4'd0;
+        else if (load_from_setting) clock_sec_l <= setting_sec_l;
+        else case (clock_sec_l)
+            4'd9:    clock_sec_l <= 4'd0;
+            default: clock_sec_l <= clock_sec_l + 1'b1;
+        endcase
+        
+        
+    end
+ 
+    always @(posedge clk_1hz or negedge switch_clr) begin
+        if (!switch_clr) clock_sec_h <= 3'd0;
+        else if (load_from_setting) clock_sec_h <= setting_sec_h;
+        else if (en_clock_sec_h) case (clock_sec_h)
+            3'd5:    clock_sec_h <= 3'd0;
+            default: clock_sec_h <= clock_sec_h + 1'b1;
+        endcase
+      
+    end
+
+    always @(posedge clk_1hz or negedge switch_clr) begin
+        if (!switch_clr) clock_min_l <= 4'd0;
+        else if (load_from_setting) clock_min_l <= setting_min_l;
+        else if (en_clock_min_l) case (clock_min_l)
+            4'd9:    clock_min_l <= 4'd0;
+            default: clock_min_l <= clock_min_l + 1'b1;
+        endcase
+        
+        
+    end
+
+    always @(posedge clk_1hz or negedge switch_clr) begin
+        if (!switch_clr) clock_min_h <= 3'd0;
+        else if (load_from_setting) clock_min_h <= setting_min_h;
+        else if (en_clock_min_h) case (clock_min_h)
+            3'd5:    clock_min_h <= 3'd0;
+            default: clock_min_h <= clock_min_h + 1'b1;
+        endcase
+        
+    end
+
+    always @(posedge clk_1hz or negedge switch_clr) begin
+        if (!switch_clr) clock_hour_l <= 4'd0;
+        else if (load_from_setting) clock_hour_l <= setting_hour_l;
+        else if (en_clock_hour_l) case (1'b1) 
+            hour_reset:       clock_hour_l <= 4'd0;
+            (clock_hour_l == 4'd9): clock_hour_l <= 4'd0;
+            default:          clock_hour_l <= clock_hour_l + 1'b1;
+        endcase
+        
+    end
+
+    always @(posedge clk_1hz or negedge switch_clr) begin
+        if (!switch_clr) clock_hour_h <= 2'd0;
+        else if (load_from_setting) clock_hour_h <= setting_hour_h;
+        else if (en_clock_hour_l) case (1'b1)
+            hour_reset:       clock_hour_h <= 2'd0;
+            (clock_hour_l == 4'd9): clock_hour_h <= clock_hour_h + 1'b1;
+            default:          clock_hour_h <= clock_hour_h;
+        endcase
+        
+    end
+
+    // 校时逻辑
+
+    reg [3:0] setting_sec_l;
+    reg [2:0] setting_sec_h;
+    reg [3:0] setting_min_l;
+    reg [2:0] setting_min_h;
+    reg [3:0] setting_hour_l;
+    reg [1:0] setting_hour_h;
+    reg [1:0] position;
+    reg switch_setting_prev;
+
+    always @(posedge clk_1hz) begin
+        switch_setting_prev <= switch_setting;
+    end
+
+    wire load_from_setting;
+    assign load_from_setting = !switch_setting && switch_setting_prev;
+
+
+    always @(posedge button_1) begin
+        if (button_1)
+            position <= position + 1;
+    end
+        
+    always @(posedge button_2) begin
+        if (button_2) begin
+            if (mode == 2'd1) begin
+                case (position) 
+                    2'd0: setting_min_l  <= (setting_min_l == 9)  ? 0 : setting_min_l + 1;
+                    2'd1: setting_min_h  <= (setting_min_h == 5)  ? 0 : setting_min_h + 1;
+                    2'd2: setting_hour_l <= (setting_hour_h == 2) ? 
+                                            ((setting_hour_l == 3) ? 0 : setting_hour_l + 1):
+                                            ((setting_hour_l == 9) ? 0 : setting_hour_l + 1);
+                    2'd3: begin
+                        if (setting_hour_h == 1 && setting_hour_l > 3)
+                            setting_hour_l <= 0;
+                        setting_hour_h <= (setting_hour_h == 2) ? 0 : setting_hour_h + 1;
+                    end
+                endcase
+            end
+            if (mode == 2'd2) begin
+                case (position) 
+                    2'd0: setting_min_l  <= (setting_min_l == 9)  ? 0 : setting_min_l + 1;
+                    2'd1: setting_min_h  <= (setting_min_h == 5)  ? 0 : setting_min_h + 1;
+                    2'd2: setting_hour_l <= (setting_hour_h == 2) ? 
+                                            ((setting_hour_l == 3) ? 0 : setting_hour_l + 1):
+                                            ((setting_hour_l == 9) ? 0 : setting_hour_l + 1);
+                    2'd3: begin
+                        if (setting_hour_h == 1 && setting_hour_l > 3)
+                            setting_hour_l <= 0;
+                        setting_hour_h <= (setting_hour_h == 2) ? 0 : setting_hour_h + 1;
+                    end
+                endcase
+            end
+        end
+    end 
+    reg [3:0] alarm_sec_l;
+    reg [2:0] alarm_sec_h;
+    reg [3:0] alarm_min_l;
+    reg [2:0] alarm_min_h;
+    reg [3:0] alarm_hour_l;
+    reg [1:0] alarm_hour_h;
+    reg switch_alarm_prev;
+    always @(posedge clk_1hz) begin
+        switch_alarm_prev <= switch_alarm;
+    end
+    // alarm button  switch_alarm
+    wire load_for_alarm;
+    assign load_for_alarm = !switch_alarm && switch_alarm_prev;
+	always @ (posedge clk_1hz) begin // 使用稳定的时钟
+		if (load_for_alarm) begin    // 作为条件判断
+			alarm_sec_l  <= setting_sec_l;
+			alarm_sec_h  <= setting_sec_h;
+			alarm_min_l  <= setting_min_l;
+			alarm_min_h  <= setting_min_h;
+			alarm_hour_l <= setting_hour_l;
+			alarm_hour_h <= setting_hour_h;
+		end
+	end
+	// 把所有的 check_alarm_... 逻辑从 always 块里删掉，改成下面这样：
+	// 把所有的 check_alarm_... 逻辑从 always 块里删掉，改成下面这样：
+	wire check_alarm_sec_l = (alarm_sec_l == clock_sec_l);
+	wire check_alarm_sec_h = (alarm_sec_h == clock_sec_h);
+	wire check_alarm_min_l = (alarm_min_l == clock_min_l);
+	wire check_alarm_min_h = (alarm_min_h == clock_min_h);
+	wire check_alarm_hour_l = (alarm_hour_l == clock_hour_l);
+	wire check_alarm_hour_h = (alarm_hour_h == clock_hour_h);
+	always @ (posedge clk_1hz) begin
+		alarm_beep_enable= (check_alarm_sec_l)&(check_alarm_sec_h)&(check_alarm_min_l)&(check_alarm_min_h)&(check_alarm_hour_l)&(check_alarm_hour_h);
+	end
     // ==========================================
     // 显示译码
     // ==========================================
@@ -80,12 +263,12 @@ module main(
     wire [3:0] display_6;
 
     // 调试显示
-    assign display_1 = 4'd1;
-    assign display_2 = 4'd2;
-    assign display_3 = 4'd3;
-    assign display_4 = 4'd4;
-    assign display_5 = 4'd5;
-    assign display_6 = 4'd6;
+    assign display_1 = (mode == 2'd0) ? clock_sec_l : setting_sec_l;
+    assign display_2 = (mode == 2'd0) ? clock_sec_h : setting_sec_h;
+    assign display_3 = (mode == 2'd0) ? clock_min_l : setting_min_l;
+    assign display_4 = (mode == 2'd0) ? clock_min_h : setting_min_h;
+    assign display_5 = (mode == 2'd0) ? clock_hour_l : setting_hour_l;
+    assign display_6 = (mode == 2'd0) ? clock_hour_h : setting_hour_h;
 
     reg [0:5] flicker_mask;
 
@@ -107,13 +290,33 @@ module main(
         (display_1 == 4'h9) ? 7'b1100111 :
         7'b0000000) : 7'b0000000;
 
+    // 判定逻辑
     always @(*) begin
-        flicker_mask[3] = switch_debug2;
-        flicker_mask[4] = switch_debug3;
+        if (mode == 2'd1) begin
+            case (position)
+                2'd0 : flicker_mask = 6'b001000;
+                2'd1 : flicker_mask = 6'b000100;
+                2'd2 : flicker_mask = 6'b000010;
+                2'd3 : flicker_mask = 6'b000001;
+            endcase
+        end else begin
+            flicker_mask = 6'b000000;
+        end
+        if (mode == 2'd2) begin
+            case (position)
+                2'd0 : flicker_mask = 6'b001000;
+                2'd1 : flicker_mask = 6'b000100;
+                2'd2 : flicker_mask = 6'b000010;
+                2'd3 : flicker_mask = 6'b000001;
+            endcase
+        end else begin
+            flicker_mask = 6'b000000;
+        end
+            
     end
 
     // ==========================================
-    // 音频部分
+    // 蜂鸣器部分
     // ==========================================
     // beep_timer 为计时器，未归零时发声
 
@@ -124,9 +327,10 @@ module main(
     always @(posedge clk_1hz) begin
         if (beep_timer > 0) beep_timer <= beep_timer - 1;
 
-        if (switch_debug2)
-            beep_timer <= 4'd5;
-        
+        //if (en_clock_min_l)
+            //beep_timer <= 4'd5;
+        if (alarm_beep_enable)
+			beep_timer <= 4'd5;
     end
 
 endmodule
