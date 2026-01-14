@@ -26,7 +26,7 @@ module main(
     // ==========================================    
 
     reg [9:0] cnt1000;
-    reg clk_4hz;
+    reg clk_4hz; // 4Hz 分频
     reg rhythm; // 音频用节拍信号
 
     always @(posedge clk_1khz or negedge switch_clr) begin
@@ -52,9 +52,26 @@ module main(
     end
 
     // ==========================================
+    // 模式切换部分
+    // ==========================================
+
+
+    // 当前模式
+    // 0: 秒表模式
+    // 1: 校时模式
+    // 2: 闹钟模式
+    // 3: 秒表模式
+    wire [1:0] mode = switch_stopwatch ? 2'd3 :
+                    switch_alarm    ? 2'd2 :
+                    switch_setting  ? 2'd1 : 2'd0;       
+
+    // ==========================================
     // 显示译码
     // ==========================================
-    
+    // 修改 display_1 ~ display_6 的值即可修改显示内容
+    // 修改 flicker_mask[0...5] 的值即可启动/关闭闪烁
+
+
     wire [3:0] display_1;
     wire [3:0] display_2;
     wire [3:0] display_3;
@@ -62,6 +79,7 @@ module main(
     wire [3:0] display_5;
     wire [3:0] display_6;
 
+    // 调试显示
     assign display_1 = 4'd1;
     assign display_2 = 4'd2;
     assign display_3 = 4'd3;
@@ -97,6 +115,7 @@ module main(
     // ==========================================
     // 音频部分
     // ==========================================
+    // beep_timer 为计时器，未归零时发声
 
     reg [4:0] beep_timer;
     assign beep_enable = (beep_timer != 0) || switch_debug1;
