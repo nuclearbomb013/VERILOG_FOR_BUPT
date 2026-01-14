@@ -14,7 +14,7 @@ set_location_assignment PIN_1 -to button_3_raw
 set_location_assignment PIN_54 -to switch_clr #K0
 set_location_assignment PIN_81 -to switch_setting #K1
 set_location_assignment PIN_80 -to switch_alarm #K2
-set_location_assignment PIN_81 -to switch_stopwatch #K3
+set_location_assignment PIN_79 -to switch_stopwatch #K3
 set_location_assignment PIN_65 -to switch_debug1 #K13
 set_location_assignment PIN_64 -to switch_debug2 #K14
 set_location_assignment PIN_63 -to switch_debug3 #K15
