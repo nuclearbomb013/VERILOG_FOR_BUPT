@@ -1,16 +1,16 @@
 module main(
-    input clk_1hz,            // 1Hz ÃëÊ±ÖÓ (¿ØÖÆ×ÜÊ±³¤)
-    input clk_1khz,      // 1000Hz ÒôÆµÊ±ÖÓ (¿ØÖÆàÖàÖàÖµÄ½Ú×à)
+    input clk_1hz,            // 1Hz ç§’æ—¶é’Ÿ (æ§åˆ¶æ€»æ—¶é•¿)
+    input clk_1khz,      // 1000Hz éŸ³é¢‘æ—¶é’Ÿ (æ§åˆ¶å˜€å˜€å˜€çš„èŠ‚å¥)
     input button_1,     // Pulse 
     input button_2,     // QD
-    input button_3_raw,     // CLR(ĞèÒª·­×ª)
-    input switch_clr,      // ¸´Î»ĞÅºÅ
-    input switch_setting,  // Ğ£Ê±Éè¶¨¿ª¹Ø
-    input switch_alarm, // ÄÖÖÓ¿ª¹Ø
-    input switch_stopwatch, // Ãë±í¿ª¹Ø
-    input switch_debug1, // µ÷ÊÔ¿ª¹Ø1
-    input switch_debug2, // µ÷ÊÔ¿ª¹Ø2
-    input switch_debug3, // µ÷ÊÔ¿ª¹Ø3
+    input button_3_raw,     // CLR(éœ€è¦ç¿»è½¬)
+    input switch_clr,      // å¤ä½ä¿¡å·
+    input switch_setting,  // æ ¡æ—¶è®¾å®šå¼€å…³
+    input switch_alarm, // é—¹é’Ÿå¼€å…³
+    input switch_stopwatch, // ç§’è¡¨å¼€å…³
+    input switch_debug1, // è°ƒè¯•å¼€å…³1
+    input switch_debug2, // è°ƒè¯•å¼€å…³2
+    input switch_debug3, // è°ƒè¯•å¼€å…³3
     output [6:0] LED7S_out,
     output [3:0] LED7S2_out,
     output [3:0] LED7S3_out,
@@ -19,15 +19,15 @@ module main(
     output [3:0] LED7S6_out,
     output beep
 );
-    assign button_3 = ~button_3_raw; // ·­×ª
+    assign button_3 = ~button_3_raw; // ç¿»è½¬
 
     // ==========================================
-    // ¾«È·¼ÆÊ±ºÍ·ÖÆµ
+    // ç²¾ç¡®è®¡æ—¶å’Œåˆ†é¢‘
     // ==========================================    
 
     reg [9:0] cnt1000;
-    reg clk_4hz; // 4Hz ·ÖÆµ
-    reg rhythm; // ÒôÆµÓÃ½ÚÅÄĞÅºÅ
+    reg clk_4hz; // 4Hz åˆ†é¢‘
+    reg rhythm; // éŸ³é¢‘ç”¨èŠ‚æ‹ä¿¡å·
 
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr) begin
@@ -52,21 +52,21 @@ module main(
     end
 
     // ==========================================
-    // Ä£Ê½ÇĞ»»
+    // æ¨¡å¼åˆ‡æ¢
     // ==========================================
 
 
-    // µ±Ç°Ä£Ê½
-    // 0: µç×ÓÖÓÄ£Ê½
-    // 1: Ğ£Ê±Ä£Ê½
-    // 2: ÄÖÖÓÄ£Ê½
-    // 3: Ãë±íÄ£Ê½
+    // å½“å‰æ¨¡å¼
+    // 0: ç”µå­é’Ÿæ¨¡å¼
+    // 1: æ ¡æ—¶æ¨¡å¼
+    // 2: é—¹é’Ÿæ¨¡å¼
+    // 3: ç§’è¡¨æ¨¡å¼
     wire [1:0] mode = switch_stopwatch ? 2'd3 :
                     switch_alarm    ? 2'd2 :
                     switch_setting  ? 2'd1 : 2'd0;       
 
     // ==========================================
-    // µç×ÓÖÓÂß¼­
+    // ç”µå­é’Ÿé€»è¾‘
     // ==========================================
 
     reg [3:0] clock_sec_l;
@@ -93,7 +93,7 @@ module main(
     wire hour_reset; 
     assign hour_reset = (clock_hour_h == 2'd2 && clock_hour_l == 4'd3);
 
-    // Ê±¼ä×ß×ÖÂß¼­ 
+    // æ—¶é—´èµ°å­—é€»è¾‘ 
     always @(posedge clk_1hz or negedge switch_clr) begin
         if (!switch_clr) clock_sec_l <= 4'd0;
         else if (load_from_setting) clock_sec_l <= setting_sec_l;
@@ -158,7 +158,7 @@ module main(
         
     end
 
-    // Ğ£Ê±Âß¼­
+    // æ ¡æ—¶é€»è¾‘
 
     reg [3:0] setting_sec_l;
     reg [2:0] setting_sec_h;
@@ -227,8 +227,8 @@ module main(
     // alarm button  switch_alarm
     wire load_for_alarm;
     assign load_for_alarm = !switch_alarm && switch_alarm_prev;
-	always @ (posedge clk_1hz) begin // Ê¹ÓÃÎÈ¶¨µÄÊ±ÖÓ
-		if (load_for_alarm) begin    // ×÷ÎªÌõ¼şÅĞ¶Ï
+	always @ (posedge clk_1hz) begin // ä½¿ç”¨ç¨³å®šçš„æ—¶é’Ÿ
+		if (load_for_alarm) begin    // ä½œä¸ºæ¡ä»¶åˆ¤æ–­
 			alarm_sec_l  <= setting_sec_l;
 			alarm_sec_h  <= setting_sec_h;
 			alarm_min_l  <= setting_min_l;
@@ -237,8 +237,8 @@ module main(
 			alarm_hour_h <= setting_hour_h;
 		end
 	end
-	// °ÑËùÓĞµÄ check_alarm_... Âß¼­´Ó always ¿éÀïÉ¾µô£¬¸Ä³ÉÏÂÃæÕâÑù£º
-	// °ÑËùÓĞµÄ check_alarm_... Âß¼­´Ó always ¿éÀïÉ¾µô£¬¸Ä³ÉÏÂÃæÕâÑù£º
+	// æŠŠæ‰€æœ‰çš„ check_alarm_... é€»è¾‘ä» always å—é‡Œåˆ æ‰ï¼Œæ”¹æˆä¸‹é¢è¿™æ ·ï¼š
+	// æŠŠæ‰€æœ‰çš„ check_alarm_... é€»è¾‘ä» always å—é‡Œåˆ æ‰ï¼Œæ”¹æˆä¸‹é¢è¿™æ ·ï¼š
 	wire check_alarm_sec_l = (alarm_sec_l == clock_sec_l);
 	wire check_alarm_sec_h = (alarm_sec_h == clock_sec_h);
 	wire check_alarm_min_l = (alarm_min_l == clock_min_l);
@@ -249,10 +249,10 @@ module main(
 		alarm_beep_enable= (check_alarm_sec_l)&(check_alarm_sec_h)&(check_alarm_min_l)&(check_alarm_min_h)&(check_alarm_hour_l)&(check_alarm_hour_h);
 	end
     // ==========================================
-    // ÏÔÊ¾ÒëÂë
+    // æ˜¾ç¤ºè¯‘ç 
     // ==========================================
-    // ĞŞ¸Ä display_1 ~ display_6 µÄÖµ¼´¿ÉĞŞ¸ÄÏÔÊ¾ÄÚÈİ
-    // ĞŞ¸Ä flicker_mask[0...5] µÄÖµ¼´¿ÉÆô¶¯/¹Ø±ÕÉÁË¸
+    // ä¿®æ”¹ display_1 ~ display_6 çš„å€¼å³å¯ä¿®æ”¹æ˜¾ç¤ºå†…å®¹
+    // ä¿®æ”¹ flicker_mask[0...5] çš„å€¼å³å¯å¯åŠ¨/å…³é—­é—ªçƒ
 
 
     wire [3:0] display_1;
@@ -262,7 +262,7 @@ module main(
     wire [3:0] display_5;
     wire [3:0] display_6;
 
-    // µ÷ÊÔÏÔÊ¾
+    // è°ƒè¯•æ˜¾ç¤º
     assign display_1 = (mode == 2'd0) ? clock_sec_l : setting_sec_l;
     assign display_2 = (mode == 2'd0) ? clock_sec_h : setting_sec_h;
     assign display_3 = (mode == 2'd0) ? clock_min_l : setting_min_l;
@@ -290,7 +290,7 @@ module main(
         (display_1 == 4'h9) ? 7'b1100111 :
         7'b0000000) : 7'b0000000;
 
-    // ÅĞ¶¨Âß¼­
+    // åˆ¤å®šé€»è¾‘
     always @(*) begin
         if (mode == 2'd1) begin
             case (position)
@@ -299,10 +299,8 @@ module main(
                 2'd2 : flicker_mask = 6'b000010;
                 2'd3 : flicker_mask = 6'b000001;
             endcase
-        end else begin
-            flicker_mask = 6'b000000;
         end
-        if (mode == 2'd2) begin
+        else if (mode == 2'd2) begin
             case (position)
                 2'd0 : flicker_mask = 6'b001000;
                 2'd1 : flicker_mask = 6'b000100;
@@ -312,13 +310,12 @@ module main(
         end else begin
             flicker_mask = 6'b000000;
         end
-            
     end
 
     // ==========================================
-    // ·äÃùÆ÷²¿·Ö
+    // èœ‚é¸£å™¨éƒ¨åˆ†
     // ==========================================
-    // beep_timer Îª¼ÆÊ±Æ÷£¬Î´¹éÁãÊ±·¢Éù
+    // beep_timer ä¸ºè®¡æ—¶å™¨ï¼Œæœªå½’é›¶æ—¶å‘å£°
 
     reg [4:0] beep_timer;
     assign beep_enable = (beep_timer != 0) || switch_debug1;
@@ -329,7 +326,7 @@ module main(
 
         //if (en_clock_min_l)
             //beep_timer <= 4'd5;
-        if (alarm_beep_enable)
+        if (en_clock_hour_l||alarm_beep_enable)
 			beep_timer <= 4'd5;
     end
 
