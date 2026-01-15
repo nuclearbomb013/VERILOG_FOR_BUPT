@@ -21,27 +21,38 @@ module main(
     // ==========================================
     // 按钮消抖逻辑
     // ==========================================
-    reg [3:0] btn1_shift, btn2_shift;
-    reg btn1_stable, btn2_stable;
-    reg btn1_prev, btn2_prev;
-    wire btn1_pressed, btn2_pressed;
+    // 机械按钮按下/释放时会产生抖动
+    // 消抖原理：只有信号连续稳定一段时间后才认为有效
 
-    // 使用移位寄存器消抖 (需要连续4个周期稳定)
+    reg [3:0] btn1_shift, btn2_shift;   // 4位移位寄存器，存储最近4次采样值
+    reg btn1_stable, btn2_stable;       // 消抖后的稳定状态
+    reg btn1_prev, btn2_prev;           // 上一周期的稳定状态（用于边沿检测）
+    wire btn1_pressed, btn2_pressed;    // 按下瞬间产生的单周期脉冲
+
+    // ========== 第一阶段：移位寄存器采样 + 稳定性判断 ==========
+    // 时钟频率：1kHz，即每1ms采样一次
+    // 需要连续4个周期（4ms）信号稳定才确认状态改变
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr) begin
+            // 复位时清零所有寄存器
             btn1_shift <= 4'b0000;
             btn2_shift <= 4'b0000;
             btn1_stable <= 1'b0;
             btn2_stable <= 1'b0;
         end else begin
+            // 移位操作：将新采样值移入最低位，高位依次左移
             btn1_shift <= {btn1_shift[2:0], button_1};
             btn2_shift <= {btn2_shift[2:0], button_2};
             
-            // 全1则稳定高，全0则稳定低
+            // 稳定性判断：
+            // - 全1（4'b1111）：连续4ms高电平，确认按下
+            // - 全0（4'b0000）：连续4ms低电平，确认释放
+            // - 其他值：仍在抖动期间，保持原状态不变
             if (btn1_shift == 4'b1111)
-                btn1_stable <= 1'b1;
+                btn1_stable <= 1'b1;        // 确认按下
             else if (btn1_shift == 4'b0000)
-                btn1_stable <= 1'b0;
+                btn1_stable <= 1'b0;        // 确认释放
+            // else: 保持不变（隐含条件）
                 
             if (btn2_shift == 4'b1111)
                 btn2_stable <= 1'b1;
@@ -50,19 +61,23 @@ module main(
         end
     end
 
-    // 边沿检测 - 检测稳定信号的上升沿
+    // ========== 第二阶段：边沿检测（生成单周期脉冲） ==========
+    // 目的：将持续的高电平转换为按下瞬间的单个脉冲
+    // 原理：比较当前值和前一周期的值，检测上升沿
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr) begin
             btn1_prev <= 1'b0;
             btn2_prev <= 1'b0;
         end else begin
+            // 每个时钟周期保存当前稳定状态
             btn1_prev <= btn1_stable;
             btn2_prev <= btn2_stable;
         end
     end
 
-    assign btn1_pressed = btn1_stable && !btn1_prev;  // 上升沿脉冲
-    assign btn2_pressed = btn2_stable && !btn2_prev;  // 上升沿脉冲
+    // 上升沿检测：当前为1且前一周期为0时，输出单周期高脉冲
+    assign btn1_pressed = btn1_stable && !btn1_prev;
+    assign btn2_pressed = btn2_stable && !btn2_prev;
 
     // 分频器和节拍生成器
     // 从 1kHz 时钟分频出：
