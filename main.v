@@ -31,15 +31,15 @@ module main(
     reg clk_2hz;
 
     always @(posedge clk_1khz) begin
-        if cnt1k == 1000-1:
+        if (cnt1k == 1000-1)
             cnt1k <= 0;
         else
             cnt1k <= cnt1k + 1;
         
-        if (cnt1k == 0 or cnt1k == 500)
+        if (cnt1k == 0 || cnt1k == 500)
             clk_4hz <= ~clk_4hz;
         
-        if (cnt1k == 0 or cnt1k == 250 or cnt1k == 500 or cnt1k == 750)
+        if (cnt1k == 0 || cnt1k == 250 || cnt1k == 500 || cnt1k == 750)
             clk_2hz <= ~clk_2hz;
     end
     
@@ -91,6 +91,6 @@ module main(
     // ==========================================
     reg [4:0] beep_timer;
 
-    assign beep = ((debug_1) | (debug2 & clk_2hz) | (debug3 & clk_4hz)) & clk_1khz;
+    assign beep = ((debug_1) | (debug_2 & clk_2hz) | (debug_3 & clk_4hz)) & clk_1khz;
 
 endmodule
