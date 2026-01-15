@@ -7,10 +7,7 @@ module main(
     input switch_clr,      // 复位信号
     input switch_setting,  // 校时设定开关
     input switch_alarm, // 闹钟开关
-    input switch_stopwatch, // 秒表开关
-    input switch_debug1, // 调试开关1
-    input switch_debug2, // 调试开关2
-    input switch_debug3, // 调试开关3
+
     output [6:0] LED7S_out,
     output [3:0] LED7S2_out,
     output [3:0] LED7S3_out,
@@ -20,6 +17,52 @@ module main(
     output beep
 );
     assign button_3 = ~button_3_raw; // 翻转
+
+    // ==========================================
+    // 按钮消抖逻辑
+    // ==========================================
+    reg [3:0] btn1_shift, btn2_shift;
+    reg btn1_stable, btn2_stable;
+    reg btn1_prev, btn2_prev;
+    wire btn1_pressed, btn2_pressed;
+
+    // 使用移位寄存器消抖 (需要连续4个周期稳定)
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr) begin
+            btn1_shift <= 4'b0000;
+            btn2_shift <= 4'b0000;
+            btn1_stable <= 1'b0;
+            btn2_stable <= 1'b0;
+        end else begin
+            btn1_shift <= {btn1_shift[2:0], button_1};
+            btn2_shift <= {btn2_shift[2:0], button_2};
+            
+            // 全1则稳定高，全0则稳定低
+            if (btn1_shift == 4'b1111)
+                btn1_stable <= 1'b1;
+            else if (btn1_shift == 4'b0000)
+                btn1_stable <= 1'b0;
+                
+            if (btn2_shift == 4'b1111)
+                btn2_stable <= 1'b1;
+            else if (btn2_shift == 4'b0000)
+                btn2_stable <= 1'b0;
+        end
+    end
+
+    // 边沿检测 - 检测稳定信号的上升沿
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr) begin
+            btn1_prev <= 1'b0;
+            btn2_prev <= 1'b0;
+        end else begin
+            btn1_prev <= btn1_stable;
+            btn2_prev <= btn2_stable;
+        end
+    end
+
+    assign btn1_pressed = btn1_stable && !btn1_prev;  // 上升沿脉冲
+    assign btn2_pressed = btn2_stable && !btn2_prev;  // 上升沿脉冲
 
     // 分频器和节拍生成器
     // 从 1kHz 时钟分频出：
@@ -59,10 +102,9 @@ module main(
     // 0: 电子钟模式
     // 1: 校时模式
     // 2: 闹钟模式
-    // 3: 秒表模式
-    wire [1:0] mode = switch_stopwatch ? 2'd3 :
-                    switch_alarm    ? 2'd2 :
-                    switch_setting  ? 2'd1 : 2'd0;       
+    // (移除 mode 3，因为 switch_stopwatch 未定义)
+    wire [1:0] mode = switch_alarm   ? 2'd2 :
+                      switch_setting ? 2'd1 : 2'd0;       
 
     // 电子钟逻辑
     reg [3:0] clock_sec_l;
@@ -195,63 +237,59 @@ module main(
     wire load_for_alarm;
     assign load_for_alarm = !switch_alarm && switch_alarm_prev;
 
-    // 切换调整位置 (按下button_1)
-    always @(posedge button_1) begin
-        if (button_1)
+    // 切换调整位置 (使用消抖后的按钮信号)
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr)
+            position <= 2'd0;
+        else if (btn1_pressed)
             position <= position + 1;
     end
         
-    always @(posedge button_2) begin
-        if (button_2) begin
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr) begin
+            setting_min_l <= 4'd0;
+            setting_min_h <= 3'd0;
+            setting_hour_l <= 4'd0;
+            setting_hour_h <= 2'd0;
+            alarm_min_l <= 4'd0;
+            alarm_min_h <= 3'd0;
+            alarm_hour_l <= 4'd1;
+            alarm_hour_h <= 2'd0;
+        end
+        else if (btn2_pressed) begin
             if (mode == 2'd1) begin
                 case (position) 
-                    // 分低位: 0-9 循环
                     2'd0: setting_min_l <= (setting_min_l == 4'd9) ? 4'd0 : setting_min_l + 1'b1;
-                    // 分高位: 0-5 循环
                     2'd1: setting_min_h <= (setting_min_h == 3'd5) ? 3'd0 : setting_min_h + 1'b1;
-                    // 时低位: 需考虑24小时限制
                     2'd2: begin
                         if (setting_hour_h == 2'd2)
-                            // 20-23时，时低位只能是0-3
                             setting_hour_l <= (setting_hour_l == 4'd3) ? 4'd0 : setting_hour_l + 1'b1;
                         else
-                            // 0x-19时，时低位是0-9
                             setting_hour_l <= (setting_hour_l == 4'd9) ? 4'd0 : setting_hour_l + 1'b1;
                     end
-                    
-                    // 时高位: 0-2 循环，并自动修正时低位
                     2'd3: begin
-                        // 如果即将变成2x时，且时低位>3，则修正为0
                         if (setting_hour_h == 2'd1 && setting_hour_l > 4'd3)
                             setting_hour_l <= 4'd0;
                         setting_hour_h <= (setting_hour_h == 2'd2) ? 2'd0 : setting_hour_h + 1'b1;
                     end
-            endcase
+                endcase
             end
-            if (mode == 2'd2) begin
+            else if (mode == 2'd2) begin
                 case (position) 
-                    // 分低位: 0-9 循环
                     2'd0: alarm_min_l <= (alarm_min_l == 4'd9) ? 4'd0 : alarm_min_l + 1'b1;
-                    // 分高位: 0-5 循环
                     2'd1: alarm_min_h <= (alarm_min_h == 3'd5) ? 3'd0 : alarm_min_h + 1'b1;
-                    // 时低位: 需考虑24小时限制
                     2'd2: begin
                         if (alarm_hour_h == 2'd2)
-                            // 20-23时，时低位只能是0-3
                             alarm_hour_l <= (alarm_hour_l == 4'd3) ? 4'd0 : alarm_hour_l + 1'b1;
                         else
-                            // 0x-19时，时低位是0-9
                             alarm_hour_l <= (alarm_hour_l == 4'd9) ? 4'd0 : alarm_hour_l + 1'b1;
                     end
-                    
-                    // 时高位: 0-2 循环，并自动修正时低位
                     2'd3: begin
-                        // 如果即将变成2x时，且时低位>3，则修正为0
                         if (alarm_hour_h == 2'd1 && alarm_hour_l > 4'd3)
                             alarm_hour_l <= 4'd0;
                         alarm_hour_h <= (alarm_hour_h == 2'd2) ? 2'd0 : alarm_hour_h + 1'b1;
                     end
-            endcase
+                endcase
             end
         end
     end 
@@ -279,12 +317,20 @@ module main(
     wire [3:0] display_6;
 
     // 根据模式选择显示内容
-    assign display_1 = (mode == 2'd0) ? clock_sec_l : setting_sec_l;
-    assign display_2 = (mode == 2'd0) ? clock_sec_h : setting_sec_h;
-    assign display_3 = (mode == 2'd0) ? clock_min_l : setting_min_l;
-    assign display_4 = (mode == 2'd0) ? clock_min_h : setting_min_h;
-    assign display_5 = (mode == 2'd0) ? clock_hour_l : setting_hour_l;
-    assign display_6 = (mode == 2'd0) ? clock_hour_h : setting_hour_h;
+    assign display_1 = (mode == 2'd0) ? clock_sec_l : 4'b0;
+    assign display_2 = (mode == 2'd0) ? clock_sec_h : 4'b0;
+    assign display_3 = (mode == 2'd0) ? clock_min_l : 
+                        (mode == 2'd1) ? setting_min_l : 
+                        (mode == 2'd2) ? alarm_min_l : 4'b0;
+    assign display_4 = (mode == 2'd0) ? clock_min_h : 
+                        (mode == 2'd1) ? setting_min_h : 
+                        (mode == 2'd2) ? alarm_min_h : 4'b0;
+    assign display_5 = (mode == 2'd0) ? clock_hour_l : 
+                        (mode == 2'd1) ? setting_hour_l : 
+                        (mode == 2'd2) ? alarm_hour_l : 4'b0;
+    assign display_6 = (mode == 2'd0) ? clock_hour_h : 
+                        (mode == 2'd1) ? setting_hour_h : 
+                        (mode == 2'd2) ? alarm_hour_h : 4'b0;
 
     reg [0:5] flicker_mask;
 
@@ -336,7 +382,7 @@ module main(
     // beep_timer 为计时器，未归零时发声
 
     reg [3:0] beep_timer;
-    assign beep_enable = (beep_timer != 4'd0) || switch_debug1;
+    assign beep_enable = (beep_timer != 4'd0) ;
     assign beep = beep_enable && rhythm && clk_1khz;
 
     always @(posedge clk_1hz) begin
