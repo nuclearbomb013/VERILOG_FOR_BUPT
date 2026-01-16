@@ -22,7 +22,8 @@ module main(
 );
 
     assign btn_3 = ~btn_3_raw;
-    assign hopper_signal = simu_hopper_stop? 1'b0 : clk_1hz;
+    assign hopper_signal = simu_hopper_stop? 1'b0 : clk_1hz; // 漏斗装药信号
+    assign conveyor_signal = ~simu_conveyor_stop; // 传送带正常运行信号
 
     // ==========================================
     // 分频
@@ -72,12 +73,27 @@ module main(
     // 组合逻辑负责判断
     
     always @(*) begin
+        state_next = state;
         case (state)
             SETTING: begin
             end
             RUNNING: begin
+                if (now_pills == target_pills) begin
+                    if (now_bottles == target_bottles)
+                        state_next = DONE; //装瓶完毕
+                    else 
+                        state_next = SWITCHING; //切换瓶
+                end else if (hopper_timer == 0) begin
+                    state_next = ERROR; // 未收到漏斗信号，报缺料错误
+                end
             end
             SWITCHING: begin
+                if (switch_timer == 0) begin
+                    if (conveyor_signal)
+                        state_next = RUNNING; // 传送带正常运行，开始装瓶
+                    else
+                        state_next = ERROR; // 传送带停止，报传送带错误
+                end
             end
             DONE: begin
             end
@@ -95,8 +111,10 @@ module main(
                 SETTING: begin
                 end
                 RUNNING: begin
+                    // 进入运行态，计数器清零
                 end
                 SWITCHING: begin
+                    switch_timer <= 4'd2; // 将计时器设为2s
                 end
                 DONE: begin
                 end
@@ -105,7 +123,8 @@ module main(
                 FATAL: begin
                 end
             endcase
-        end state <= state_next;
+            state <= state_next;
+        end 
     end
 
     // 切换计时器逻辑
