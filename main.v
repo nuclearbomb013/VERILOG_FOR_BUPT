@@ -168,12 +168,38 @@ module main(
         end
     end
     
+    always @(posedge clk_1khz or negedge switch_clr) begin
+    // 1. 复位分支（优先级最高：无论任何状态，复位都清零）
+        if (!switch_clr) begin
+            target_pills1 <= 4'd0;
+            target_pills2 <= 4'd0;
+            target_pills3 <= 4'd0;
+            target_bottles1 <= 4'd0;
+            target_bottles2 <= 4'd0;
+        end
+        // 2. 非复位分支：仅当state==SETTING时，才执行数位调整
+        else begin
+            // 核心修改：增加state==SETTING的条件判断
+            if (state == SETTING) begin // 只有设定状态下，才允许调整数位
+                case (position) 
+                    3'd0: target_pills1 <= (target_pills1 == 4'd9) ? 4'd0 : target_pills1 + 1'b1;
+                    3'd1: target_pills2 <= (target_pills2 == 4'd9) ? 4'd0 : target_pills2 + 1'b1;
+                    3'd2: target_pills3 <= (target_pills3 == 4'd9) ? 4'd0 : target_pills3 + 1'b1; // 已修正原错误
+                    3'd3: target_bottles1 <= (target_bottles1 == 4'd9) ? 4'd0 : target_bottles1 + 1'b1; // 已修正原错误
+                    3'd4: target_bottles2 <= (target_bottles2 == 4'd9) ? 4'd0 : target_bottles2 + 1'b1;
+                endcase
+            end
+            // 非SETTING状态：不执行任何操作，保持原有值（Verilog默认行为，无需额外代码）
+        end
+    end
     // 时序逻辑负责转移
     always @(posedge clk_1khz) begin
         if (clk_1khz) begin
             if (state == state_next) begin  
                 case (state) // 工作逻辑
                     SETTING: begin
+                        if (btn_3)
+                            state_next = RUNNING;
                     end
                     RUNNING: begin
                         // 进行计数
@@ -288,3 +314,4 @@ module main(
     assign beep = ((beep_timer | beep_always) | (beep_2hz & clk_2hz) | (beep_4hz & clk_4hz)) & clk_1khz;
 
 endmodule
+
