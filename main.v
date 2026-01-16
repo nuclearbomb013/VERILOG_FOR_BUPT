@@ -59,7 +59,7 @@ module main(
         if (cnt1k == 0 || cnt1k == 250 || cnt1k == 500 || cnt1k == 750)
             clk_4hz <= ~clk_4hz;
     end
-    
+
     // ==========================================
     // 主状态机
     // ==========================================
@@ -78,7 +78,9 @@ module main(
     reg [3:0] now_bottles2; // 已经完成的瓶数 0~99 十位
 
     reg [3:0] switch_timer; // 切换计时器，用于判断下一瓶是否到位
+    wire switch_timer_set; // 切换计时器设置信号
     reg [3:0] hopper_timer; // 漏斗计时器，用于判断漏斗是否缺料
+    wire hopper_timer_set; // 漏斗计时器设置信号
 
     parameter [2:0]
         SETTING  = 3'b000, // 0
@@ -103,36 +105,9 @@ module main(
         if (emergncy_stop) begin
             state_next = FATAL; // 急停开关触发，报严重错误
         end else begin
-            case (state)
+            case (state) // 状态转移条件
                 SETTING: begin
-                    always @(posedge clk_1khz or negedge switch_clr) begin
-                        if (!switch_clr) begin
-                            target_pills1 <= 4'd0;
-                            target_pills2 <= 4'd0;
-                            target_pills3 <= 4'd0;
-                            target_bottles1 <= 4'd0;
-                            target_bottles2 <= 4'd0;
-                        end
-                        else if (switch_clr) begin
-                            if (mode == 2'd1) begin
-                                case (position) 
-                                    2'd0: setting_min_l <= (setting_min_l == 4'd9) ? 4'd0 : setting_min_l + 1'b1;
-                                    2'd1: setting_min_h <= (setting_min_h == 3'd5) ? 3'd0 : setting_min_h + 1'b1;
-                                    2'd2: begin
-                                        if (setting_hour_h == 2'd2)
-                                            setting_hour_l <= (setting_hour_l == 4'd3) ? 4'd0 : setting_hour_l + 1'b1;
-                                        else
-                                            setting_hour_l <= (setting_hour_l == 4'd9) ? 4'd0 : setting_hour_l + 1'b1;
-                                    end
-                                    2'd3: begin
-                                        if (setting_hour_h == 2'd1 && setting_hour_l > 4'd3)
-                                            setting_hour_l <= 4'd0;
-                                        setting_hour_h <= (setting_hour_h == 2'd2) ? 2'd0 : setting_hour_h + 1'b1;
-                                    end
-                                endcase
-                            end
-                        end
-                    end
+                    
                 end
                 RUNNING: begin
                     if (now_pills == target_pills) begin
@@ -167,31 +142,7 @@ module main(
             endcase
         end
     end
-    
-    always @(posedge clk_1khz or negedge switch_clr) begin
-    // 1. 复位分支（优先级最高：无论任何状态，复位都清零）
-        if (!switch_clr) begin
-            target_pills1 <= 4'd0;
-            target_pills2 <= 4'd0;
-            target_pills3 <= 4'd0;
-            target_bottles1 <= 4'd0;
-            target_bottles2 <= 4'd0;
-        end
-        // 2. 非复位分支：仅当state==SETTING时，才执行数位调整
-        else begin
-            // 核心修改：增加state==SETTING的条件判断
-            if (state == SETTING) begin // 只有设定状态下，才允许调整数位
-                case (position) 
-                    3'd0: target_pills1 <= (target_pills1 == 4'd9) ? 4'd0 : target_pills1 + 1'b1;
-                    3'd1: target_pills2 <= (target_pills2 == 4'd9) ? 4'd0 : target_pills2 + 1'b1;
-                    3'd2: target_pills3 <= (target_pills3 == 4'd9) ? 4'd0 : target_pills3 + 1'b1; // 已修正原错误
-                    3'd3: target_bottles1 <= (target_bottles1 == 4'd9) ? 4'd0 : target_bottles1 + 1'b1; // 已修正原错误
-                    3'd4: target_bottles2 <= (target_bottles2 == 4'd9) ? 4'd0 : target_bottles2 + 1'b1;
-                endcase
-            end
-            // 非SETTING状态：不执行任何操作，保持原有值（Verilog默认行为，无需额外代码）
-        end
-    end
+
     // 时序逻辑负责转移
     always @(posedge clk_1khz) begin
         if (clk_1khz) begin
@@ -238,16 +189,53 @@ module main(
 
     // 切换计时器逻辑
     always @(posedge clk_timer) begin
-        if (switch_timer != 0)
+        if (switch_timer_set)
+            switch_timer <= 2;
+        else if (switch_timer != 0)
             switch_timer <= switch_timer - 1;
     end
 
     // 漏斗计时器逻辑
     always @(posedge clk_timer) begin
+        if (hopper_timer_set)
+            hopper_timer <= 5;
         if (hopper_timer != 0)
             hopper_timer <= hopper_timer - 1;
     end
 
+    // ==========================================
+    // SETTING逻辑
+    // ==========================================
+
+    // 控制逻辑
+    always @(posedge clk_1khz or negedge switch_clr) begin
+    // 1. 复位分支（优先级最高：无论任何状态，复位都清零）
+        if (!switch_clr) begin
+            target_pills1 <= 4'd0;
+            target_pills2 <= 4'd0;
+            target_pills3 <= 4'd0;
+            target_bottles1 <= 4'd0;
+            target_bottles2 <= 4'd0;
+        end
+        // 2. 非复位分支：仅当state==SETTING时，才执行数位调整
+        else begin
+            // 核心修改：增加state==SETTING的条件判断
+            if (state == SETTING) begin // 只有设定状态下，才允许调整数位
+                case (position) 
+                    3'd0: target_pills1 <= (target_pills1 == 4'd9) ? 4'd0 : target_pills1 + 1'b1;
+                    3'd1: target_pills2 <= (target_pills2 == 4'd9) ? 4'd0 : target_pills2 + 1'b1;
+                    3'd2: target_pills3 <= (target_pills3 == 4'd9) ? 4'd0 : target_pills3 + 1'b1; // 已修正原错误
+                    3'd3: target_bottles1 <= (target_bottles1 == 4'd9) ? 4'd0 : target_bottles1 + 1'b1; // 已修正原错误
+                    3'd4: target_bottles2 <= (target_bottles2 == 4'd9) ? 4'd0 : target_bottles2 + 1'b1;
+                endcase
+
+                // 在这里写进位逻辑
+            end
+            // 非SETTING状态：不执行任何操作，保持原有值（Verilog默认行为，无需额外代码）
+        end
+    end
+
+    
     // ==========================================
     // 显示译码
     // ==========================================
@@ -291,7 +279,7 @@ module main(
     reg [1:0] anim; // 3帧动画表示
 
     always @(*) begin
-        if(state==setting)begin
+        if(state == SETTING) begin
             case(position)
                 3'd0:flicker_mask=6'b010000;
                 3'd1:flicker_mask=6'b001000;
