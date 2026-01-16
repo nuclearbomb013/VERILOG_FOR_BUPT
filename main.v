@@ -92,10 +92,27 @@ module main(
     reg [2:0] state; // 状态机状态 
     reg [2:0] state_next; // 状态机下一状态
 
+     //按钮信号
+    reg btn_1_prev;
+    reg btn_2_prev;
+    reg btn_3_prev;
+    assign btn_1_signal = (btn_1_prev == 1'b0 && btn_1 == 1'b1);
+    always @(posedge clk_1khz) begin
+        btn_1_prev <= btn_1;
+    end
+    assign btn_2_signal = (btn_2_prev == 1'b0 && btn_2 == 1'b1);
+    always @(posedge clk_1khz) begin
+        btn_2_prev <= btn_2;
+    end
+    assign btn_3_signal = (btn_3_prev == 1'b0 && btn_3 == 1'b1);
+    always @(posedge clk_1khz) begin
+        btn_3_prev <= btn_3;
+    end
+
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr)
             position <= 3'd0;
-        else if (btn_1)
+        else if (btn_1_signal)
             position <= position + 1;
     end
 
