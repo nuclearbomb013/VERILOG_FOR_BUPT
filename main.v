@@ -122,7 +122,9 @@ module main(
                 end
                 SWITCHING: begin
                     if (switch_timer == 0) begin
-                        if (conveyor_signal)
+                        if (now_pills != target_pills)// **【不等判断同理，可复用】**
+                            state_next = FATAL; // 切换失败，报超标错误
+                        else if (conveyor_signal)
                             state_next = RUNNING; // 传送带正常运行，开始装瓶
                         else
                             state_next = ERROR; // 传送带停止，报传送带错误
@@ -148,7 +150,8 @@ module main(
     always @(posedge clk_1khz) begin
         if (clk_1khz) begin
             if (state == state_next) begin  
-                case (state) // 工作逻辑
+                beep_timer_set <= 0;
+                case (state) // 工作逻辑（状态未改变）
                     SETTING: begin
                         if (btn_3)
                             state_next = RUNNING;
@@ -169,20 +172,8 @@ module main(
                 endcase
             end else begin 
                 case (state_next) // 状态转移
-                    SETTING: begin
-                    end
                     RUNNING: begin
-                        // 进入运行态，计数器清零，蜂鸣器短鸣
-                    end
-                    SWITCHING: begin
-                        // 进入切换态，设置切换计时器2s
-                    end
-                    DONE: begin
-                        
-                    end
-                    ERROR: begin
-                    end
-                    FATAL: begin
+                        // **【计数器清零】**
                     end
                 endcase
                 state <= state_next;
@@ -309,13 +300,16 @@ module main(
     // ==========================================
     // 蜂鸣器部分
     // ==========================================
-    reg [4:0] beep_timer; // 蜂鸣器计时器(单位：250ms)
+    reg [3:0] beep_timer; // 蜂鸣器计时器(单位：250ms)
+    assign beep_timer_set = state != RUNNING & state_next == RUNNING;
     assign beep_always = state == DONE;
     assign beep_2hz = state == ERROR;
     assign beep_4hz = state == FATAL;
     
     always @(clk_4hz) begin
-        if (beep_timer != 0)
+        if (beep_timer_set)
+            beep_timer <= 4;
+        else if (beep_timer != 0)
             beep_timer <= beep_timer - 1;
     end
 
