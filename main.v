@@ -69,7 +69,7 @@ module main(
     reg [3:0] target_pills3; // 设定每瓶药片数 0~999 百位
     reg [3:0] target_bottles1; // 设定总瓶数 0~99 个位
     reg [3:0] target_bottles2; // 设定总瓶数 0~99 十位
-    reg position; //数位
+    reg [2:0] position; //数位
 
     reg [3:0] now_pills1; // 当前瓶药片数 0~999 个位
     reg [3:0] now_pills2; // 当前瓶药片数 0~999 十位
@@ -90,8 +90,14 @@ module main(
     reg [2:0] state; // 状态机状态 
     reg [2:0] state_next; // 状态机下一状态
 
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr)
+            position <= 3'd0;
+        else if (btn_1)
+            position <= position + 1;
+    end
+
     // 组合逻辑负责判断
-    
     always @(*) begin
         state_next = state;
         if (emergncy_stop) begin
@@ -99,6 +105,34 @@ module main(
         end else begin
             case (state)
                 SETTING: begin
+                    always @(posedge clk_1khz or negedge switch_clr) begin
+                        if (!switch_clr) begin
+                            target_pills1 <= 4'd0;
+                            target_pills2 <= 4'd0;
+                            target_pills3 <= 4'd0;
+                            target_bottles1 <= 4'd0;
+                            target_bottles2 <= 4'd0;
+                        end
+                        else if (switch_clr) begin
+                            if (mode == 2'd1) begin
+                                case (position) 
+                                    2'd0: setting_min_l <= (setting_min_l == 4'd9) ? 4'd0 : setting_min_l + 1'b1;
+                                    2'd1: setting_min_h <= (setting_min_h == 3'd5) ? 3'd0 : setting_min_h + 1'b1;
+                                    2'd2: begin
+                                        if (setting_hour_h == 2'd2)
+                                            setting_hour_l <= (setting_hour_l == 4'd3) ? 4'd0 : setting_hour_l + 1'b1;
+                                        else
+                                            setting_hour_l <= (setting_hour_l == 4'd9) ? 4'd0 : setting_hour_l + 1'b1;
+                                    end
+                                    2'd3: begin
+                                        if (setting_hour_h == 2'd1 && setting_hour_l > 4'd3)
+                                            setting_hour_l <= 4'd0;
+                                        setting_hour_h <= (setting_hour_h == 2'd2) ? 2'd0 : setting_hour_h + 1'b1;
+                                    end
+                                endcase
+                            end
+                        end
+                    end
                 end
                 RUNNING: begin
                     if (now_pills == target_pills) begin
@@ -112,9 +146,7 @@ module main(
                 end
                 SWITCHING: begin
                     if (switch_timer == 0) begin
-                        if () // 检测装药数量
-                            state_next = FATAL; // 装药数量异常，报超标严重错误
-                        else if (conveyor_signal)
+                        if (conveyor_signal)
                             state_next = RUNNING; // 传送带正常运行，开始装瓶
                         else
                             state_next = ERROR; // 传送带停止，报传送带错误
@@ -136,7 +168,7 @@ module main(
         end
     end
     
-    // 时序逻辑负责处理和转移
+    // 时序逻辑负责转移
     always @(posedge clk_1khz) begin
         if (clk_1khz) begin
             if (state == state_next) begin  
@@ -176,8 +208,6 @@ module main(
                 state <= state_next;
             end
         end 
-
-        
     end
 
     // 切换计时器逻辑
