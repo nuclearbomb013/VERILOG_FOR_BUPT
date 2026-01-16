@@ -9,10 +9,6 @@ module main(
     input simu_hopper_stop, // 漏斗停止信号
     input simu_hopper_add,  // 漏斗手动增加
     input simu_conveyor_stop, // 传送带停止信号
-    input debug_1,
-    input debug_2,
-    input debug_3,
-    input debug_4,
     output [6:0] LED7S_out,
     output [3:0] LED7S2_out,
     output [3:0] LED7S3_out,
@@ -21,40 +17,28 @@ module main(
     output [3:0] LED7S6_out,
     output beep
 );
+    
+    wire btn_3;
+    assign btn_3 = ~btn_3_raw; // CLR按键取反，按下为高电平
 
-    assign btn_3 = ~btn_3_raw;
-    assign hopper_level = ((simu_hopper_stop & state == RUNNING) ? 1'b0 : clk_1hz) | simu_hopper_add; 
-    // 漏斗装药原信号，假设每秒自动装药只在运行状态下有效
-    wire hopper_signal;
-    assign conveyor_signal = ~simu_conveyor_stop; // 传送带正常运行信号
-
-    // ==========================================
-    // 输入转换为同步脉冲
-    // ==========================================
-    reg hopper_level_prev; // 漏斗装药信号
-    assign hopper_signal = (hopper_level_prev == 1'b0 && hopper_level == 1'b1);
-
-    always @(posedge clk_1khz) begin
-        hopper_level_prev <= hopper_level;
+    // 简单按键上升沿检测（同步到 clk_1khz）
+    reg btn1_prev, btn2_prev, btn3_prev;
+    wire btn1_pressed = btn_1 && !btn1_prev;
+    wire btn2_pressed = btn_2 && !btn2_prev;
+    wire btn3_pressed = btn_3 && !btn3_prev;
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr) begin
+            btn1_prev <= 1'b0;
+            btn2_prev <= 1'b0;
+            btn3_prev <= 1'b0;
+        end else begin
+            btn1_prev <= btn_1;
+            btn2_prev <= btn_2;
+            btn3_prev <= btn_3;
+        end
     end
 
-     //按钮信号
-    reg btn_1_prev;
-    reg btn_2_prev;
-    reg btn_3_prev;
-    assign btn_1_signal = (btn_1_prev == 1'b0 && btn_1 == 1'b1);
-    always @(posedge clk_1khz) begin
-        btn_1_prev <= btn_1;
-    end
-    assign btn_2_signal = (btn_2_prev == 1'b0 && btn_2 == 1'b1);
-    always @(posedge clk_1khz) begin
-        btn_2_prev <= btn_2;
-    end
-    assign btn_3_signal = (btn_3_prev == 1'b0 && btn_3 == 1'b1);
-    always @(posedge clk_1khz) begin
-        btn_3_prev <= btn_3;
-    end
-
+   
     // ==========================================
     // 分频
     // ==========================================
@@ -94,159 +78,105 @@ module main(
     reg [3:0] now_bottles1; // 已经完成的瓶数 0~99 个位
     reg [3:0] now_bottles2; // 已经完成的瓶数 0~99 十位
 
-    reg [3:0] switch_timer; // 切换计时器，用于判断下一瓶是否到位
-    wire switch_timer_set; // 切换计时器设置信号
-    reg [3:0] hopper_timer; // 漏斗计时器，用于判断漏斗是否缺料
-    wire hopper_timer_set; // 漏斗计时器设置信号
+    // 状态定义：上电进入 SETTING，按 btn3 确认进入 RUNNING，达到目标瓶数进入 DONE
+    localparam SETTING = 2'd0;
+    localparam RUNNING = 2'd1;
+    localparam DONE    = 2'd2;
+    localparam ERROR   = 2'd3;
 
-    parameter [2:0]
-        SETTING  = 3'b000, // 0
-        RUNNING  = 3'b001, // 1
-        SWITCHING = 3'b010, // 2
-        DONE     = 3'b011, // 3
-        ERROR    = 3'b100, // 4
-        FATAL    = 3'b101; // 5
-    reg [2:0] state; // 状态机状态 
-    reg [2:0] state_next; // 状态机下一状态
+    reg [1:0] state;
 
-    // 组合逻辑负责判断
-    always @(*) begin
-        state_next = state;
-        if (emergncy_stop) begin
-            state_next = FATAL; // 急停开关触发，报严重错误
+
+    // 目标/当前数值仍保持每位寄存器表示（便于数码管显示）
+    // 已移除漏斗上升沿检测（测试时不使用）
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr) begin
+            state <= SETTING;
+            // 清零当前计数
+            now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
+            now_bottles1 <= 4'd0; now_bottles2 <= 4'd0;
+            // 初始化目标为
+            target_pills1 <= 4'd1; target_pills2 <= 4'd0; target_pills3 <= 4'd0;
+            target_bottles1 <= 4'd1; target_bottles2 <= 4'd0;
+            position <= 3'd0;
         end else begin
-            case (state) // 状态转移条件
-                SETTING: begin
-                    
+            // 设置态：btn1 切位，btn2 增加所选位，btn3 确认开始计数
+            if (state == SETTING) begin
+                if (btn1_pressed) begin
+                    // 循环切换 0..4（3位药片 + 2位瓶数）
+                    if (position == 3'd4) position <= 3'd0;
+                    else position <= position + 1'b1;
                 end
-                RUNNING: begin
-                    // **【此处的相等判断需要重写为计数器的相等判断，最好开两个assign作为指示变量】**
-                    if (now_pills == target_pills) begin
-                        if (now_bottles == target_bottles)
-                            state_next = DONE; //装瓶完毕
-                        else 
-                            state_next = SWITCHING; //切换瓶
-                    end else if (hopper_timer == 0) begin
-                        state_next = ERROR; // 未收到漏斗信号，报缺料错误
-                    end
-                end
-                SWITCHING: begin
-                    if (switch_timer == 0) begin
-                        if (now_pills != target_pills)// **【不等判断同理，可复用】**
-                            state_next = FATAL; // 切换失败，报超标错误
-                        else if (conveyor_signal)
-                            state_next = RUNNING; // 传送带正常运行，开始装瓶
-                        else
-                            state_next = ERROR; // 传送带停止，报传送带错误
-                    end
-                end
-                DONE: begin
-                    if (btn_1_signal || btn_2_signal || btn_3_signal) // 接受任意按钮信号
-                        state_next = SETTING; // 复位
-                end
-                ERROR: begin
-                    if (conveyor_signal || hopper_timer != 0) // 若恢复正常
-                        state_next = RUNNING; // 继续工作
-                end
-                FATAL: begin
-                    if (btn_1_signal || btn_2_signal || btn_3_signal) // 接受任意按钮信号
-                        state_next = SETTING; // 复位
-                end
-            endcase
-        end
-    end
 
-    // 时序逻辑负责转移
-    always @(posedge clk_1khz) begin
-        if (clk_1khz) begin
-            if (state == state_next) begin
-                case (state) // 工作逻辑（状态未改变）
-                    SETTING: begin
-                        if (btn_3_signal)
-                            state_next = RUNNING;
-                    end
-                    RUNNING: begin
-                        if (hopper_signal) begin
-                            // **【在此进行计数】**
+                if (btn2_pressed) begin
+                    case (position)
+                        3'd0: target_pills1 <= (target_pills1 == 4'd9) ? 4'd0 : target_pills1 + 1'b1;
+                        3'd1: target_pills2 <= (target_pills2 == 4'd9) ? 4'd0 : target_pills2 + 1'b1;
+                        3'd2: target_pills3 <= (target_pills3 == 4'd9) ? 4'd0 : target_pills3 + 1'b1;
+                        3'd3: target_bottles1 <= (target_bottles1 == 4'd9) ? 4'd0 : target_bottles1 + 1'b1;
+                        3'd4: target_bottles2 <= (target_bottles2 == 4'd9) ? 4'd0 : target_bottles2 + 1'b1;
+                        default: ;
+                    endcase
+                end
+
+                if (btn3_pressed) begin
+                    // 确认设置，进入计数模式（RUNNING），从 0 开始计数
+                    state <= RUNNING;
+                    now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
+                    now_bottles1 <= 4'd0; now_bottles2 <= 4'd0;
+                end
+            end
+            // 计数态：去掉对漏斗加药和急停信号的依赖，改为手动 btn2 作为测试计数脉冲
+            else if (state == RUNNING) begin
+                // 测试用：按 btn2 手动增加药片计数（用于验证计数逻辑）
+                if (btn2_pressed) begin
+                    // 增加药片计数（逐位进位）
+                    if (now_pills1 == 4'd9) begin
+                        now_pills1 <= 4'd0;
+                        if (now_pills2 == 4'd9) begin
+                            now_pills2 <= 4'd0;
+                            if (now_pills3 == 4'd9) now_pills3 <= 4'd0;
+                            else now_pills3 <= now_pills3 + 1'b1;
+                        end else now_pills2 <= now_pills2 + 1'b1;
+                    end else now_pills1 <= now_pills1 + 1'b1;
+
+                    // 判断是否达到目标药片数（比较三位）
+                    if ((now_pills3 == target_pills3) && (now_pills2 == target_pills2) && (now_pills1 == target_pills1)) begin
+                        // 抵达目标：清药片计数，增加瓶数（逐位进位）
+                        now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
+                        if (now_bottles1 == 4'd9) begin
+                            now_bottles1 <= 4'd0;
+                            now_bottles2 <= now_bottles2 + 1'b1;
+                        end else now_bottles1 <= now_bottles1 + 1'b1;
+
+                        // 检查是否达到目标瓶数，达到则进入 DONE
+                        if ((now_bottles2 == target_bottles2) && (now_bottles1 == target_bottles1)) begin
+                            // 达到目标瓶数 -> 完成
+                            state <= DONE;
                         end
                     end
-                    SWITCHING: begin
-                    end
-                    DONE: begin
-                    end
-                    ERROR: begin
-                    end
-                    FATAL: begin
-                    end
-                endcase
-            end else begin 
-                case (state_next) // 状态转移
-                    RUNNING: begin
-                        // **【计数器清零】**
-                    end
-                endcase
-                state <= state_next;
+                end
+
+                
             end
-        end 
-    end
-
-    assign switch_timer_set = (state == RUNNING) & (state_next == SWITCHING);
-
-    // 切换计时器逻辑
-    always @(posedge clk_timer) begin
-        if (switch_timer_set)
-            switch_timer <= 2;
-        else if (switch_timer != 0)
-            switch_timer <= switch_timer - 1;
-    end
-
-    // 漏斗计时器逻辑
-    always @(posedge clk_timer) begin
-        if (hopper_timer_set)
-            hopper_timer <= 5;
-        if (hopper_timer != 0)
-            hopper_timer <= hopper_timer - 1;
-    end
-
-    // ==========================================
-    // SETTING逻辑
-    // ==========================================
-
-    always @(posedge clk_1khz or negedge switch_clr) begin
-        if (!switch_clr)
-            position <= 3'd0;
-        else if (btn_1_signal)
-            position <= position + 1;
-    end
-
-    // 控制逻辑
-    always @(posedge clk_1khz or negedge switch_clr) begin
-    // 1. 复位分支（优先级最高：无论任何状态，复位都清零）
-        if (!switch_clr) begin
-            target_pills1 <= 4'd0;
-            target_pills2 <= 4'd0;
-            target_pills3 <= 4'd0;
-            target_bottles1 <= 4'd0;
-            target_bottles2 <= 4'd0;
-        end
-        // 2. 非复位分支：仅当state==SETTING时，才执行数位调整
-        else begin
-            // 核心修改：增加state==SETTING的条件判断
-            if (state == SETTING) begin // 只有设定状态下，才允许调整数位
-                case (position) 
-                    3'd0: target_pills1 <= (target_pills1 == 4'd9) ? 4'd0 : target_pills1 + 1'b1;
-                    3'd1: target_pills2 <= (target_pills2 == 4'd9) ? 4'd0 : target_pills2 + 1'b1;
-                    3'd2: target_pills3 <= (target_pills3 == 4'd9) ? 4'd0 : target_pills3 + 1'b1; // 已修正原错误
-                    3'd3: target_bottles1 <= (target_bottles1 == 4'd9) ? 4'd0 : target_bottles1 + 1'b1; // 已修正原错误
-                    3'd4: target_bottles2 <= (target_bottles2 == 4'd9) ? 4'd0 : target_bottles2 + 1'b1;
-                endcase
-
-                // 在这里写进位逻辑
+            // 完成态：短按 btn3 返回设置模式（重置当前计数）
+            else if (state == DONE) begin
+                if (btn3_pressed) begin
+                    state <= SETTING;
+                    now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
+                    now_bottles1 <= 4'd0; now_bottles2 <= 4'd0;
+                end
             end
-            // 非SETTING状态：不执行任何操作，保持原有值（Verilog默认行为，无需额外代码）
+            else if (state == ERROR) begin
+                // 错误态：按 btn3 返回设置
+                if (btn3_pressed) begin
+                    state <= SETTING;
+                    now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
+                    now_bottles1 <= 4'd0; now_bottles2 <= 4'd0;
+                end
+            end
         end
     end
-
     
     // ==========================================
     // 显示译码
@@ -262,74 +192,43 @@ module main(
     wire [3:0] display_5;
     wire [3:0] display_6;
 
-    // 调试显示
+    // 调试显示：SETTING 显示目标，其他态显示当前
     assign display_1 = state;
-    assign display_2 = state == SETTING ? target_pills1 : now_pills1;
-    assign display_3 = state == SETTING ? target_pills2 : now_pills2;
-    assign display_4 = state == SETTING ? target_pills3 : now_pills3;
-    assign display_5 = state == SETTING ? target_bottles1 : now_bottles1;
-    assign display_6 = state == SETTING ? target_bottles2 : now_bottles2;
+    assign display_2 = (state == SETTING) ? target_pills1   : now_pills1;
+    assign display_3 = (state == SETTING) ? target_pills2   : now_pills2;
+    assign display_4 = (state == SETTING) ? target_pills3   : now_pills3;
+    assign display_5 = (state == SETTING) ? target_bottles1 : now_bottles1;
+    assign display_6 = (state == SETTING) ? target_bottles2 : now_bottles2;
 
     reg [0:5] flicker_mask;
 
-    assign LED7S2_out = ~ flicker_mask[1] | clk_4hz ? display_2 : 4'hf;
-    assign LED7S3_out = ~ flicker_mask[2] | clk_4hz ? display_3 : 4'hf;
-    assign LED7S4_out = ~ flicker_mask[3] | clk_4hz ? display_4 : 4'hf;
-    assign LED7S5_out = ~ flicker_mask[4] | clk_4hz ? display_5 : 4'hf;
-    assign LED7S6_out = ~ flicker_mask[5] | clk_4hz ? display_6 : 4'hf;
-    assign LED7S_out = (~ flicker_mask[0] | clk_4hz) ?
-                        ((display_1 == 0) ? 7'b1001001 : 
-                         (display_1 == 1) ? ((anim == 1) ? 7'b0001001 :
-                                           (anim == 2) ? 7'b0010010 : 7'b0100100) :
-                         (display_1 == 2) ? ((anim == 1) ? 7'b0110000 :
-                                           (anim == 2) ? 7'b1000000 : 7'b0000110) :
-                         (display_1 == 3) ? ((anim == 1) ? 7'b0111111 :
-                                           (anim == 2) ? 7'b0111111 : 7'b0000000) :
-                         (display_1 == 4) ? 7'b1111001 :
-                         (display_1 == 5) ? 7'b1110001 : 7'b0000000) : 7'b0000000;
-
-    reg [1:0] anim; // 3帧动画表示
+    assign LED7S2_out = (((~flicker_mask[1]) | clk_4hz) ? display_2 : 4'hf);
+    assign LED7S3_out = (((~flicker_mask[2]) | clk_4hz) ? display_3 : 4'hf);
+    assign LED7S4_out = (((~flicker_mask[3]) | clk_4hz) ? display_4 : 4'hf);
+    assign LED7S5_out = (((~flicker_mask[4]) | clk_4hz) ? display_5 : 4'hf);
+    assign LED7S6_out = (((~flicker_mask[5]) | clk_4hz) ? display_6 : 4'hf);
+    assign LED7S_out = 7'b0000000;
 
     always @(*) begin
-        if(state == SETTING) begin
-            case(position)
-                3'd0:flicker_mask=6'b010000;
-                3'd1:flicker_mask=6'b001000;
-                3'd2:flicker_mask=6'b000100;
-                3'd3:flicker_mask=6'b000010;
-                3'd4:flicker_mask=6'b000001;
-                default:flicker_mask=6'b000000;
+        if (state == SETTING) begin
+            case (position)
+                2'd0 : flicker_mask = 6'b010000;
+                2'd1 : flicker_mask = 6'b001000;
+                2'd2 : flicker_mask = 6'b000100;
+                2'd3 : flicker_mask = 6'b000010;
+                2'd4 : flicker_mask = 6'b000001;
             endcase
-        end else begin
-            flicker_mask=6'b000000;
         end
+        else begin
+            flicker_mask = 6'b000000;
+        end
+            
     end
-
-    always @(posedge clk_4hz) begin
-        if (anim == 2)
-            anim <= 0;
-        else
-            anim <= anim + 1;
-    end
-
-
     // ==========================================
-    // 蜂鸣器部分
+    // 蜂鸣器部分（简化：DONE 时 2Hz 蜂鸣用于提示）
     // ==========================================
-    reg [3:0] beep_timer; // 蜂鸣器计时器(单位：250ms)
-    assign beep_timer_set = state != RUNNING & state_next == RUNNING;
-    assign beep_always = state == DONE;
-    assign beep_2hz = state == ERROR;
-    assign beep_4hz = state == FATAL;
-    
-    always @(clk_4hz) begin
-        if (beep_timer_set)
-            beep_timer <= 4;
-        else if (beep_timer != 0)
-            beep_timer <= beep_timer - 1;
-    end
-
-    assign beep = ((beep_timer | beep_always) | (beep_2hz & clk_2hz) | (beep_4hz & clk_4hz)) & clk_1khz;
+    // remove complex/undefined signals and keep simple behavior
+    assign beep = (state == DONE) ? clk_2hz : 1'b0;
 
 endmodule
 
