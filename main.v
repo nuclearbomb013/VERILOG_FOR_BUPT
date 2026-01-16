@@ -4,6 +4,7 @@ module main(
     input btn_1,     // Pulse 
     input btn_2,     // QD
     input btn_3_raw,     // CLR(需要翻转)
+    input emergncy_stop, // 急停开关
     input simu_hopper_stop, // 漏斗停止信号
     input simu_hopper_add,  // 漏斗手动增加
     input simu_conveyor_stop, // 传送带停止信号
@@ -27,22 +28,80 @@ module main(
     // 分频
     // ==========================================
     reg [9:0] cnt1k;
-    reg clk_4hz;
-    reg clk_2hz;
+    reg clk_4hz; // 4Hz 时钟，用于数码管动画、数码管闪烁和蜂鸣器
+    reg clk_2hz; // 2Hz 时钟，用于数码管蜂鸣器
+    reg clk_timer; // 计时器时钟，用于切换计时器和漏斗计时器
 
     always @(posedge clk_1khz) begin
         if (cnt1k == 1000-1)
             cnt1k <= 0;
+            clk_timer <= ~clk_timer;
         else
             cnt1k <= cnt1k + 1;
         
         if (cnt1k == 0 || cnt1k == 500)
-            clk_4hz <= ~clk_4hz;
+            clk_2hz <= ~clk_2hz;
         
         if (cnt1k == 0 || cnt1k == 250 || cnt1k == 500 || cnt1k == 750)
-            clk_2hz <= ~clk_2hz;
+            clk_4hz <= ~clk_4hz;
     end
     
+    // ==========================================
+    // 主状态机
+    // ==========================================
+    
+    reg [9:0] target_pills; // 设定每瓶药片数 0~999
+    reg [6:0] target_bottles; // 设定总瓶数 0~99
+
+    reg [9:0] now_pills; // 当前瓶药片数 0~999
+    reg [6:0] now_bottles; // 已经完成的瓶数 0~99
+
+    reg [3:0] switch_timer; // 切换计时器，用于判断下一瓶是否到位
+    reg [3:0] hopper_timer; // 漏斗计时器，用于判断漏斗是否缺料
+
+    parameter [2:0]
+        SETTING  = 3'b000,
+        RUNNING  = 3'b001,
+        SWITCHING = 3'b010,
+        DONE     = 3'b011;
+        ERROR    = 3'b100;
+        FATAL    = 3'b101;
+    reg [2:0] state; // 状态机状态 
+    reg [2:0] state_next; // 状态机下一状态
+
+    // 组合逻辑负责判断
+    
+    always @(*) begin
+        case (state)
+            SETTING: begin
+            end
+            RUNNING: begin
+            end
+            SWITCHING: begin
+            end
+            DONE: begin
+            end
+            ERROR: begin
+            end
+            FATAL: begin
+            end
+        endcase
+    end
+    
+    // 时序逻辑负责转移
+    always @(posedge clk_1khz) begin
+        state <= state_next;
+    end
+
+    // 切换计时器逻辑
+    always @(posedge clk_timer) begin
+        
+    end
+
+    // 漏斗计时器逻辑
+    always @(posedge clk_timer) begin
+        
+    end
 
     // ==========================================
     // 显示译码
@@ -74,17 +133,18 @@ module main(
     assign LED7S5_out = ~ flicker_mask[4] | clk_4hz ? display_5 : 4'hf;
     assign LED7S6_out = ~ flicker_mask[5] | clk_4hz ? display_6 : 4'hf;
     assign LED7S_out = (~ flicker_mask[0] | clk_4hz) ? 
-        ((display_1 == 4'h0) ? 7'b0111111 :
-        (display_1 == 4'h1) ? 7'b0000110 :
-        (display_1 == 4'h2) ? 7'b1011011 :
-        (display_1 == 4'h3) ? 7'b1001111 :
-        (display_1 == 4'h4) ? 7'b1100110 :
-        (display_1 == 4'h5) ? 7'b1101101 :
-        (display_1 == 4'h6) ? 7'b1111100 :
-        (display_1 == 4'h7) ? 7'b0000111 :
-        (display_1 == 4'h8) ? 7'b1111111 :
-        (display_1 == 4'h9) ? 7'b1100111 :
-        7'b0000000) : 7'b0000000;
+        ((anim == 1) ? 7'b0001001 :
+         (anim == 2) ? 7'b0010010 : 7'b0100100) : 7'b0000000; // 显示动画
+
+    reg [1:0] anim; // 3帧动画表示
+
+    always @(posedge clk_4hz) begin
+        if (anim == 2)
+            anim <= 0;
+        else
+            anim <= anim + 1;
+    end
+
 
     // ==========================================
     // 蜂鸣器部分
