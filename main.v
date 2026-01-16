@@ -29,13 +29,30 @@ module main(
     assign conveyor_signal = ~simu_conveyor_stop; // 传送带正常运行信号
 
     // ==========================================
-    // 漏斗脉冲转换
+    // 输入转换为同步脉冲
     // ==========================================
     reg hopper_level_prev; // 漏斗装药信号
     assign hopper_signal = (hopper_level_prev == 1'b0 && hopper_level == 1'b1);
 
     always @(posedge clk_1khz) begin
         hopper_level_prev <= hopper_level;
+    end
+
+     //按钮信号
+    reg btn_1_prev;
+    reg btn_2_prev;
+    reg btn_3_prev;
+    assign btn_1_signal = (btn_1_prev == 1'b0 && btn_1 == 1'b1);
+    always @(posedge clk_1khz) begin
+        btn_1_prev <= btn_1;
+    end
+    assign btn_2_signal = (btn_2_prev == 1'b0 && btn_2 == 1'b1);
+    always @(posedge clk_1khz) begin
+        btn_2_prev <= btn_2;
+    end
+    assign btn_3_signal = (btn_3_prev == 1'b0 && btn_3 == 1'b1);
+    always @(posedge clk_1khz) begin
+        btn_3_prev <= btn_3;
     end
 
     // ==========================================
@@ -91,30 +108,6 @@ module main(
         FATAL    = 3'b101; // 5
     reg [2:0] state; // 状态机状态 
     reg [2:0] state_next; // 状态机下一状态
-
-     //按钮信号
-    reg btn_1_prev;
-    reg btn_2_prev;
-    reg btn_3_prev;
-    assign btn_1_signal = (btn_1_prev == 1'b0 && btn_1 == 1'b1);
-    always @(posedge clk_1khz) begin
-        btn_1_prev <= btn_1;
-    end
-    assign btn_2_signal = (btn_2_prev == 1'b0 && btn_2 == 1'b1);
-    always @(posedge clk_1khz) begin
-        btn_2_prev <= btn_2;
-    end
-    assign btn_3_signal = (btn_3_prev == 1'b0 && btn_3 == 1'b1);
-    always @(posedge clk_1khz) begin
-        btn_3_prev <= btn_3;
-    end
-
-    always @(posedge clk_1khz or negedge switch_clr) begin
-        if (!switch_clr)
-            position <= 3'd0;
-        else if (btn_1_signal)
-            position <= position + 1;
-    end
 
     // 组合逻辑负责判断
     always @(*) begin
@@ -219,6 +212,13 @@ module main(
     // ==========================================
     // SETTING逻辑
     // ==========================================
+
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr)
+            position <= 3'd0;
+        else if (btn_1_signal)
+            position <= position + 1;
+    end
 
     // 控制逻辑
     always @(posedge clk_1khz or negedge switch_clr) begin
