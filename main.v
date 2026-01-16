@@ -110,6 +110,7 @@ module main(
                     
                 end
                 RUNNING: begin
+                    // **【此处的相等判断需要重写为计数器的相等判断，最好开两个assign作为指示变量】**
                     if (now_pills == target_pills) begin
                         if (now_bottles == target_bottles)
                             state_next = DONE; //装瓶完毕
@@ -153,7 +154,9 @@ module main(
                             state_next = RUNNING;
                     end
                     RUNNING: begin
-                        // 进行计数
+                        if (hopper_signal) begin
+                            // **【在此进行计数】**
+                        end
                     end
                     SWITCHING: begin
                     end
@@ -186,6 +189,8 @@ module main(
             end
         end 
     end
+
+    assign switch_timer_set = (state == RUNNING) & (state_next == SWITCHING);
 
     // 切换计时器逻辑
     always @(posedge clk_timer) begin
