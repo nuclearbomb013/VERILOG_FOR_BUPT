@@ -1,14 +1,14 @@
 module main(
-    input clk_1hz,       // 1Hz ç§’æ—¶é’Ÿ (æ§åˆ¶æ€»æ—¶é•¿)
-    input clk_1khz,      // 1000Hz éŸ³é¢‘æ—¶é’Ÿ (æ§åˆ¶å˜€å˜€å˜€çš„èŠ‚å¥)
+    input clk_1hz,       // 1Hz ÃëÊ±ÖÓ (¿ØÖÆ×ÜÊ±³¤)
+    input clk_1khz,      // 1000Hz ÒôÆµÊ±ÖÓ (¿ØÖÆàÖàÖàÖµÄ½Ú×à)
     input btn_1,     // Pulse 
     input btn_2,     // QD
-    input btn_3_raw,     // CLR(éœ€è¦ç¿»è½¬)
-    input emergncy_stop, // æ€¥åœå¼€å…³
-    input simu_hopper_stop, // æ¼æ–—åœæ­¢ä¿¡å·
-    input simu_hopper_add,  // æ¼æ–—æ‰‹åŠ¨å¢åŠ 
-    input simu_conveyor_stop, // ä¼ é€å¸¦åœæ­¢ä¿¡å·
-    input switch_clr,      // å¤ä½ä¿¡å·
+    input btn_3_raw,     // CLR(ĞèÒª·­×ª)
+    input emergncy_stop, // ¼±Í£¿ª¹Ø
+    input switch_clr,      // ¸´Î»¿ª¹Ø
+    input simu_hopper_stop, // Â©¶·Í£Ö¹ĞÅºÅ
+    input simu_hopper_add,  // Â©¶·ÊÖ¶¯Ôö¼Ó
+    input simu_conveyor_stop, // ´«ËÍ´øÍ£Ö¹ĞÅºÅ
     input debug_1,
     input debug_2,
     input debug_3,
@@ -23,16 +23,16 @@ module main(
 );
 
     assign btn_3 = ~btn_3_raw;
-    assign hopper_signal = simu_hopper_stop? 1'b0 : clk_1hz; // æ¼æ–—è£…è¯ä¿¡å·
-    assign conveyor_signal = ~simu_conveyor_stop; // ä¼ é€å¸¦æ­£å¸¸è¿è¡Œä¿¡å·
+    assign hopper_signal = simu_hopper_stop? 1'b0 : clk_1hz; // Â©¶·×°Ò©ĞÅºÅ
+    assign conveyor_signal = ~simu_conveyor_stop; // ´«ËÍ´øÕı³£ÔËĞĞĞÅºÅ
 
     // ==========================================
-    // åˆ†é¢‘
+    // ·ÖÆµ
     // ==========================================
     reg [9:0] cnt1k;
-    reg clk_4hz; // 4Hz æ—¶é’Ÿï¼Œç”¨äºæ•°ç ç®¡åŠ¨ç”»ã€æ•°ç ç®¡é—ªçƒå’Œèœ‚é¸£å™¨
-    reg clk_2hz; // 2Hz æ—¶é’Ÿï¼Œç”¨äºæ•°ç ç®¡èœ‚é¸£å™¨
-    reg clk_timer; // è®¡æ—¶å™¨æ—¶é’Ÿï¼Œç”¨äºåˆ‡æ¢è®¡æ—¶å™¨å’Œæ¼æ–—è®¡æ—¶å™¨
+    reg clk_4hz; // 4Hz Ê±ÖÓ£¬ÓÃÓÚÊıÂë¹Ü¶¯»­¡¢ÊıÂë¹ÜÉÁË¸ºÍ·äÃùÆ÷
+    reg clk_2hz; // 2Hz Ê±ÖÓ£¬ÓÃÓÚÊıÂë¹Ü·äÃùÆ÷
+    reg clk_timer; // ¼ÆÊ±Æ÷Ê±ÖÓ£¬ÓÃÓÚÇĞ»»¼ÆÊ±Æ÷ºÍÂ©¶·¼ÆÊ±Æ÷
 
     always @(posedge clk_1khz) begin
         if (cnt1k == 1000-1) begin
@@ -49,22 +49,24 @@ module main(
     end
     
     // ==========================================
-    // ä¸»çŠ¶æ€æœº
+    // Ö÷×´Ì¬»ú
     // ==========================================
     
-    reg [3:0] target_pills1; // è®¾å®šæ¯ç“¶è¯ç‰‡æ•° 0~999 ä¸ªä½
-    reg [3:0] target_pills2; // è®¾å®šæ¯ç“¶è¯ç‰‡æ•° 0~999 åä½
-    reg [3:0] target_pills3; // è®¾å®šæ¯ç“¶è¯ç‰‡æ•° 0~999 ç™¾ä½
-    reg [3:0] target_bottles1; // è®¾å®šæ€»ç“¶æ•° 0~99 ä¸ªä½
-    reg [3:0] target_bottles2; // è®¾å®šæ€»ç“¶æ•° 0~99 åä½
-    reg position; //æ•°ä½
-    reg [3:0] now_pills1; // å½“å‰ç“¶è¯ç‰‡æ•° 0~999 ä¸ªä½
-    reg [3:0] now_pills2; // å½“å‰ç“¶è¯ç‰‡æ•° 0~999 åä½
-    reg [3:0] now_pills3; // å½“å‰ç“¶è¯ç‰‡æ•° 0~999 ç™¾ä½
-    reg [3:0] now_bottles1; // å·²ç»å®Œæˆçš„ç“¶æ•° 0~99 ä¸ªä½
-    reg [3:0] now_bottles2; // å·²ç»å®Œæˆçš„ç“¶æ•° 0~99 åä½
-    reg [3:0] switch_timer; // åˆ‡æ¢è®¡æ—¶å™¨ï¼Œç”¨äºåˆ¤æ–­ä¸‹ä¸€ç“¶æ˜¯å¦åˆ°ä½
-    reg [3:0] hopper_timer; // æ¼æ–—è®¡æ—¶å™¨ï¼Œç”¨äºåˆ¤æ–­æ¼æ–—æ˜¯å¦ç¼ºæ–™
+    reg [3:0] target_pills1; // Éè¶¨Ã¿Æ¿Ò©Æ¬Êı 0~999 ¸öÎ»
+    reg [3:0] target_pills2; // Éè¶¨Ã¿Æ¿Ò©Æ¬Êı 0~999 Ê®Î»
+    reg [3:0] target_pills3; // Éè¶¨Ã¿Æ¿Ò©Æ¬Êı 0~999 °ÙÎ»
+    reg [3:0] target_bottles1; // Éè¶¨×ÜÆ¿Êı 0~99 ¸öÎ»
+    reg [3:0] target_bottles2; // Éè¶¨×ÜÆ¿Êı 0~99 Ê®Î»
+    reg position; //ÊıÎ»
+
+    reg [3:0] now_pills1; // µ±Ç°Æ¿Ò©Æ¬Êı 0~999 ¸öÎ»
+    reg [3:0] now_pills2; // µ±Ç°Æ¿Ò©Æ¬Êı 0~999 Ê®Î»
+    reg [3:0] now_pills3; // µ±Ç°Æ¿Ò©Æ¬Êı 0~999 °ÙÎ»
+    reg [3:0] now_bottles1; // ÒÑ¾­Íê³ÉµÄÆ¿Êı 0~99 ¸öÎ»
+    reg [3:0] now_bottles2; // ÒÑ¾­Íê³ÉµÄÆ¿Êı 0~99 Ê®Î»
+
+    reg [3:0] switch_timer; // ÇĞ»»¼ÆÊ±Æ÷£¬ÓÃÓÚÅĞ¶ÏÏÂÒ»Æ¿ÊÇ·ñµ½Î»
+    reg [3:0] hopper_timer; // Â©¶·¼ÆÊ±Æ÷£¬ÓÃÓÚÅĞ¶ÏÂ©¶·ÊÇ·ñÈ±ÁÏ
 
     parameter [2:0]
         SETTING  = 3'b000, // 0
@@ -73,10 +75,10 @@ module main(
         DONE     = 3'b011, // 3
         ERROR    = 3'b100, // 4
         FATAL    = 3'b101; // 5
-    reg [2:0] state; // çŠ¶æ€æœºçŠ¶æ€ 
-    reg [2:0] state_next; // çŠ¶æ€æœºä¸‹ä¸€çŠ¶æ€
+    reg [2:0] state; // ×´Ì¬»ú×´Ì¬ 
+    reg [2:0] state_next; // ×´Ì¬»úÏÂÒ»×´Ì¬
 
-    // ç»„åˆé€»è¾‘è´Ÿè´£åˆ¤æ–­
+    // ×éºÏÂß¼­¸ºÔğÅĞ¶Ï
     
     always @(*) begin
         state_next = state;
@@ -86,19 +88,19 @@ module main(
             RUNNING: begin
                 if (now_pills == target_pills) begin
                     if (now_bottles == target_bottles)
-                        state_next = DONE; //è£…ç“¶å®Œæ¯•
+                        state_next = DONE; //×°Æ¿Íê±Ï
                     else 
-                        state_next = SWITCHING; //åˆ‡æ¢ç“¶
+                        state_next = SWITCHING; //ÇĞ»»Æ¿
                 end else if (hopper_timer == 0) begin
-                    state_next = ERROR; // æœªæ”¶åˆ°æ¼æ–—ä¿¡å·ï¼ŒæŠ¥ç¼ºæ–™é”™è¯¯
+                    state_next = ERROR; // Î´ÊÕµ½Â©¶·ĞÅºÅ£¬±¨È±ÁÏ´íÎó
                 end
             end
             SWITCHING: begin
                 if (switch_timer == 0) begin
                     if (conveyor_signal)
-                        state_next = RUNNING; // ä¼ é€å¸¦æ­£å¸¸è¿è¡Œï¼Œå¼€å§‹è£…ç“¶
+                        state_next = RUNNING; // ´«ËÍ´øÕı³£ÔËĞĞ£¬¿ªÊ¼×°Æ¿
                     else
-                        state_next = ERROR; // ä¼ é€å¸¦åœæ­¢ï¼ŒæŠ¥ä¼ é€å¸¦é”™è¯¯
+                        state_next = ERROR; // ´«ËÍ´øÍ£Ö¹£¬±¨´«ËÍ´ø´íÎó
                 end
             end
             DONE: begin
@@ -110,17 +112,17 @@ module main(
         endcase
     end
     
-    // æ—¶åºé€»è¾‘è´Ÿè´£è½¬ç§»
+    // Ê±ĞòÂß¼­¸ºÔğ×ªÒÆ
     always @(posedge clk_1khz) begin
         if (clk_1khz && state != state_next) begin
             case (state_next)
                 SETTING: begin
                 end
                 RUNNING: begin
-                    // è¿›å…¥è¿è¡Œæ€ï¼Œè®¡æ•°å™¨æ¸…é›¶
+                    // ½øÈëÔËĞĞÌ¬£¬¼ÆÊıÆ÷ÇåÁã
                 end
                 SWITCHING: begin
-                    switch_timer <= 4'd2; // å°†è®¡æ—¶å™¨è®¾ä¸º2s
+                    switch_timer <= 4'd2; // ½«¼ÆÊ±Æ÷ÉèÎª2s
                 end
                 DONE: begin
                 end
@@ -133,23 +135,23 @@ module main(
         end 
     end
 
-    // åˆ‡æ¢è®¡æ—¶å™¨é€»è¾‘
+    // ÇĞ»»¼ÆÊ±Æ÷Âß¼­
     always @(posedge clk_timer) begin
         if (switch_timer != 0)
             switch_timer <= switch_timer - 1;
     end
 
-    // æ¼æ–—è®¡æ—¶å™¨é€»è¾‘
+    // Â©¶·¼ÆÊ±Æ÷Âß¼­
     always @(posedge clk_timer) begin
         if (hopper_timer != 0)
             hopper_timer <= hopper_timer - 1;
     end
 
     // ==========================================
-    // æ˜¾ç¤ºè¯‘ç 
+    // ÏÔÊ¾ÒëÂë
     // ==========================================
-    // ä¿®æ”¹ display_1 ~ display_6 çš„å€¼å³å¯ä¿®æ”¹æ˜¾ç¤ºå†…å®¹
-    // ä¿®æ”¹ flicker_mask[0...5] çš„å€¼å³å¯å¯åŠ¨/å…³é—­é—ªçƒ
+    // ĞŞ¸Ä display_1 ~ display_6 µÄÖµ¼´¿ÉĞŞ¸ÄÏÔÊ¾ÄÚÈİ
+    // ĞŞ¸Ä flicker_mask[0...5] µÄÖµ¼´¿ÉÆô¶¯/¹Ø±ÕÉÁË¸
 
 
     wire [3:0] display_1;
@@ -159,7 +161,7 @@ module main(
     wire [3:0] display_5;
     wire [3:0] display_6;
 
-    // è°ƒè¯•æ˜¾ç¤º
+    // µ÷ÊÔÏÔÊ¾
     assign display_1 = state;
     assign display_2 = 4'h2;
     assign display_3 = 4'h3;
@@ -185,7 +187,7 @@ module main(
                          (display_1 == 4) ? 7'b1111001 :
                          (display_1 == 5) ? 7'b1110001 : 7'b0000000) : 7'b0000000;
 
-    reg [1:0] anim; // 3å¸§åŠ¨ç”»è¡¨ç¤º
+    reg [1:0] anim; // 3Ö¡¶¯»­±íÊ¾
 
     always @(posedge clk_4hz) begin
         if (anim == 2)
@@ -196,7 +198,7 @@ module main(
 
 
     // ==========================================
-    // èœ‚é¸£å™¨éƒ¨åˆ†
+    // ·äÃùÆ÷²¿·Ö
     // ==========================================
     reg [4:0] beep_timer;
 
