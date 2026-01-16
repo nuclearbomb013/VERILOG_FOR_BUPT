@@ -22,19 +22,17 @@ module main(
     assign btn_3 = ~btn_3_raw; // CLR按键取反，按下为高电平
 
     // 简单按键上升沿检测（同步到 clk_1khz）
-    reg btn1_prev, btn2_prev, btn3_prev;
+    reg btn1_prev, btn2_prev;
     wire btn1_pressed = btn_1 && !btn1_prev;
     wire btn2_pressed = btn_2 && !btn2_prev;
-    wire btn3_pressed = btn_3 && !btn3_prev;
+
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr) begin
             btn1_prev <= 1'b0;
             btn2_prev <= 1'b0;
-            btn3_prev <= 1'b0;
         end else begin
             btn1_prev <= btn_1;
             btn2_prev <= btn_2;
-            btn3_prev <= btn_3;
         end
     end
 
@@ -119,7 +117,7 @@ module main(
                     endcase
                 end
 
-                if (btn3_pressed) begin
+                if (btn_3) begin
                     // 确认设置，进入计数模式（RUNNING），从 0 开始计数
                     state <= RUNNING;
                     now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
@@ -161,7 +159,7 @@ module main(
             end
             // 完成态：短按 btn3 返回设置模式（重置当前计数）
             else if (state == DONE) begin
-                if (btn3_pressed) begin
+                if (btn_3) begin
                     state <= SETTING;
                     now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
                     now_bottles1 <= 4'd0; now_bottles2 <= 4'd0;
@@ -169,7 +167,7 @@ module main(
             end
             else if (state == ERROR) begin
                 // 错误态：按 btn3 返回设置
-                if (btn3_pressed) begin
+                if (btn_3) begin
                     state <= SETTING;
                     now_pills1 <= 4'd0; now_pills2 <= 4'd0; now_pills3 <= 4'd0;
                     now_bottles1 <= 4'd0; now_bottles2 <= 4'd0;
@@ -212,11 +210,11 @@ module main(
     always @(*) begin
         if (state == SETTING) begin
             case (position)
-                2'd0 : flicker_mask = 6'b010000;
-                2'd1 : flicker_mask = 6'b001000;
-                2'd2 : flicker_mask = 6'b000100;
-                2'd3 : flicker_mask = 6'b000010;
-                2'd4 : flicker_mask = 6'b000001;
+                3'd0 : flicker_mask = 6'b010000;
+                3'd1 : flicker_mask = 6'b001000;
+                3'd2 : flicker_mask = 6'b000100;
+                3'd3 : flicker_mask = 6'b000010;
+                3'd4 : flicker_mask = 6'b000001;
             endcase
         end
         else begin
