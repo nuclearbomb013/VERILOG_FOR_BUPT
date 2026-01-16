@@ -141,7 +141,7 @@ module main(
                     end
                 end
                 DONE: begin
-                    if (btn_1 || btn_2 || btn_3) // 接受任意按钮信号
+                    if (btn_1_signal || btn_2_signal || btn_3_signal) // 接受任意按钮信号
                         state_next = SETTING; // 复位
                 end
                 ERROR: begin
@@ -149,7 +149,7 @@ module main(
                         state_next = RUNNING; // 继续工作
                 end
                 FATAL: begin
-                    if (btn_1 || btn_2 || btn_3) // 接受任意按钮信号
+                    if (btn_1_signal || btn_2_signal || btn_3_signal) // 接受任意按钮信号
                         state_next = SETTING; // 复位
                 end
             endcase
@@ -159,11 +159,10 @@ module main(
     // 时序逻辑负责转移
     always @(posedge clk_1khz) begin
         if (clk_1khz) begin
-            if (state == state_next) begin  
-                beep_timer_set <= 0;
+            if (state == state_next) begin
                 case (state) // 工作逻辑（状态未改变）
                     SETTING: begin
-                        if (btn_3)
+                        if (btn_3_signal)
                             state_next = RUNNING;
                     end
                     RUNNING: begin
