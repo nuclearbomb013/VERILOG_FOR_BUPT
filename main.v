@@ -23,8 +23,20 @@ module main(
 );
 
     assign btn_3 = ~btn_3_raw;
-    assign hopper_signal = simu_hopper_stop? 1'b0 : clk_1hz; // 漏斗装药信号
+    assign hopper_level = ((simu_hopper_stop & state == RUNNING) ? 1'b0 : clk_1hz) | simu_hopper_add; 
+    // 漏斗装药原信号，假设每秒自动装药只在运行状态下有效
+    wire hopper_signal;
     assign conveyor_signal = ~simu_conveyor_stop; // 传送带正常运行信号
+
+    // ==========================================
+    // 漏斗脉冲转换
+    // ==========================================
+    reg hopper_level_prev; // 漏斗装药信号
+    assign hopper_signal = (hopper_level_prev == 1'b0 && hopper_level == 1'b1);
+
+    always @(posedge clk_1khz) begin
+        hopper_level_prev <= hopper_level;
+    end
 
     // ==========================================
     // 分频
