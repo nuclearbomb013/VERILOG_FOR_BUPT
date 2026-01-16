@@ -86,14 +86,26 @@ module main(
             FATAL: begin
             end
         endcase
-        state_next[0] = debug_1;
-        state_next[1] = debug_2;
-        state_next[2] = debug_3;
     end
     
     // 时序逻辑负责转移
     always @(posedge clk_1khz) begin
-        state <= state_next;
+        if (clk_1khz && state != state_next) begin
+            case (state_next)
+                SETTING: begin
+                end
+                RUNNING: begin
+                end
+                SWITCHING: begin
+                end
+                DONE: begin
+                end
+                ERROR: begin
+                end
+                FATAL: begin
+                end
+            endcase
+        end state <= state_next;
     end
 
     // 切换计时器逻辑
