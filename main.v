@@ -241,7 +241,15 @@ module main(
     // ·äÃùÆ÷²¿·Ö
     // ==========================================
     reg [4:0] beep_timer;
+    assign beep_always;
+    assign beep_2hz = state == ERROR;
+    assign beep_4hz = state == FATAL;
+    
+    always @(clk_timer) begin
+        if (beep_timer != 0)
+            beep_timer <= beep_timer - 1;
+    end
 
-    assign beep = ((debug_1) | (debug_2 & clk_2hz) | (debug_3 & clk_4hz)) & clk_1khz;
+    assign beep = ((beep_timer | beep_always) | (beep_2hz & clk_2hz) | (beep_4hz & clk_4hz)) & clk_1khz;
 
 endmodule
