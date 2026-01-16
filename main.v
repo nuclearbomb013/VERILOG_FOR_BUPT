@@ -109,42 +109,70 @@ module main(
             end
             SWITCHING: begin
                 if (switch_timer == 0) begin
-                    if (conveyor_signal)
+                    if () // 检测装药数量
+                        state_next = FATAL; // 装药数量异常，报超标严重错误
+                    else if (conveyor_signal)
                         state_next = RUNNING; // 传送带正常运行，开始装瓶
                     else
                         state_next = ERROR; // 传送带停止，报传送带错误
                 end
             end
             DONE: begin
+                if () // 接受任意按钮信号
+                    state_next = SETTING; // 复位
             end
             ERROR: begin
+                if () // 若恢复正常
+                    state_next = RUNNING; // 继续工作
             end
             FATAL: begin
+                if () // 接受任意按钮信号
+                    state_next = SETTING; // 复位
             end
         endcase
     end
     
-    // 时序逻辑负责转移
+    // 时序逻辑负责处理和转移
     always @(posedge clk_1khz) begin
-        if (clk_1khz && state != state_next) begin
-            case (state_next)
-                SETTING: begin
-                end
-                RUNNING: begin
-                    // 进入运行态，计数器清零
-                end
-                SWITCHING: begin
-                    switch_timer <= 4'd2; // 将计时器设为2s
-                end
-                DONE: begin
-                end
-                ERROR: begin
-                end
-                FATAL: begin
-                end
-            endcase
-            state <= state_next;
+        if (clk_1khz) begin
+            if (state == state_next) begin  
+                case (state) // 工作逻辑
+                    SETTING: begin
+                    end
+                    RUNNING: begin
+                        // 进行计数
+                    end
+                    SWITCHING: begin
+                    end
+                    DONE: begin
+                    end
+                    ERROR: begin
+                    end
+                    FATAL: begin
+                    end
+                endcase
+            end else begin 
+                case (state_next) // 状态转移
+                    SETTING: begin
+                    end
+                    RUNNING: begin
+                        // 进入运行态，计数器清零
+                    end
+                    SWITCHING: begin
+                        // 进入切换态，设置切换计时器2s
+                    end
+                    DONE: begin
+                    end
+                    ERROR: begin
+                    end
+                    FATAL: begin
+                    end
+                endcase
+                state <= state_next;
+            end
         end 
+
+        
     end
 
     // 切换计时器逻辑
