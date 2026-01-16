@@ -33,10 +33,10 @@ module main(
     reg clk_timer; // 计时器时钟，用于切换计时器和漏斗计时器
 
     always @(posedge clk_1khz) begin
-        if (cnt1k == 1000-1)
+        if (cnt1k == 1000-1) begin
             cnt1k <= 0;
             clk_timer <= ~clk_timer;
-        else
+        end else
             cnt1k <= cnt1k + 1;
         
         if (cnt1k == 0 || cnt1k == 500)
@@ -60,12 +60,12 @@ module main(
     reg [3:0] hopper_timer; // 漏斗计时器，用于判断漏斗是否缺料
 
     parameter [2:0]
-        SETTING  = 3'b000,
-        RUNNING  = 3'b001,
-        SWITCHING = 3'b010,
-        DONE     = 3'b011;
-        ERROR    = 3'b100;
-        FATAL    = 3'b101;
+        SETTING  = 3'b000, // 0
+        RUNNING  = 3'b001, // 1
+        SWITCHING = 3'b010, // 2
+        DONE     = 3'b011, // 3
+        ERROR    = 3'b100, // 4
+        FATAL    = 3'b101; // 5
     reg [2:0] state; // 状态机状态 
     reg [2:0] state_next; // 状态机下一状态
 
@@ -86,6 +86,9 @@ module main(
             FATAL: begin
             end
         endcase
+        state_next[0] = debug_1;
+        state_next[1] = debug_2;
+        state_next[2] = debug_3;
     end
     
     // 时序逻辑负责转移
@@ -95,12 +98,14 @@ module main(
 
     // 切换计时器逻辑
     always @(posedge clk_timer) begin
-        
+        if (switch_timer != 0)
+            switch_timer <= switch_timer - 1;
     end
 
     // 漏斗计时器逻辑
     always @(posedge clk_timer) begin
-        
+        if (hopper_timer != 0)
+            hopper_timer <= hopper_timer - 1;
     end
 
     // ==========================================
@@ -118,7 +123,7 @@ module main(
     wire [3:0] display_6;
 
     // 调试显示
-    assign display_1 = 4'h1;
+    assign display_1 = state;
     assign display_2 = 4'h2;
     assign display_3 = 4'h3;
     assign display_4 = 4'h4;
@@ -132,9 +137,16 @@ module main(
     assign LED7S4_out = ~ flicker_mask[3] | clk_4hz ? display_4 : 4'hf;
     assign LED7S5_out = ~ flicker_mask[4] | clk_4hz ? display_5 : 4'hf;
     assign LED7S6_out = ~ flicker_mask[5] | clk_4hz ? display_6 : 4'hf;
-    assign LED7S_out = (~ flicker_mask[0] | clk_4hz) ? 
-        ((anim == 1) ? 7'b0001001 :
-         (anim == 2) ? 7'b0010010 : 7'b0100100) : 7'b0000000; // 显示动画
+    assign LED7S_out = (~ flicker_mask[0] | clk_4hz) ?
+                        ((display_1 == 0) ? 7'b1001001 : 
+                         (display_1 == 1) ? ((anim == 1) ? 7'b0001001 :
+                                           (anim == 2) ? 7'b0010010 : 7'b0100100) :
+                         (display_1 == 2) ? ((anim == 1) ? 7'b0110000 :
+                                           (anim == 2) ? 7'b1000000 : 7'b0000110) :
+                         (display_1 == 3) ? ((anim == 1) ? 7'b0111111 :
+                                           (anim == 2) ? 7'b0111111 : 7'b0000000) :
+                         (display_1 == 4) ? 7'b1111001 :
+                         (display_1 == 5) ? 7'b1110001 : 7'b0000000) : 7'b0000000;
 
     reg [1:0] anim; // 3帧动画表示
 
