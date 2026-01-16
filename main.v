@@ -298,14 +298,13 @@ module main(
                 3'd2:flicker_mask=6'b000100;
                 3'd3:flicker_mask=6'b000010;
                 3'd4:flicker_mask=6'b000001;
-                3'd5:flicker_mask=6'b000000;
                 default:flicker_mask=6'b000000;
             endcase
         end else begin
             flicker_mask=6'b000000;
         end
     end
-    
+
     always @(posedge clk_4hz) begin
         if (anim == 2)
             anim <= 0;
