@@ -129,7 +129,7 @@ module main(
                     end
                 end
                 DONE: begin
-                    if () // 接受任意按钮信号
+                    if (btn_1 || btn_2 || btn_3) // 接受任意按钮信号
                         state_next = SETTING; // 复位
                 end
                 ERROR: begin
@@ -137,7 +137,7 @@ module main(
                         state_next = RUNNING; // 继续工作
                 end
                 FATAL: begin
-                    if () // 接受任意按钮信号
+                    if (btn_1 || btn_2 || btn_3) // 接受任意按钮信号
                         state_next = SETTING; // 复位
                 end
             endcase
