@@ -94,42 +94,46 @@ module main(
     
     always @(*) begin
         state_next = state;
-        case (state)
-            SETTING: begin
-            end
-            RUNNING: begin
-                if (now_pills == target_pills) begin
-                    if (now_bottles == target_bottles)
-                        state_next = DONE; //装瓶完毕
-                    else 
-                        state_next = SWITCHING; //切换瓶
-                end else if (hopper_timer == 0) begin
-                    state_next = ERROR; // 未收到漏斗信号，报缺料错误
+        if (emergncy_stop) begin
+            state_next = FATAL; // 急停开关触发，报严重错误
+        end else begin
+            case (state)
+                SETTING: begin
                 end
-            end
-            SWITCHING: begin
-                if (switch_timer == 0) begin
-                    if () // 检测装药数量
-                        state_next = FATAL; // 装药数量异常，报超标严重错误
-                    else if (conveyor_signal)
-                        state_next = RUNNING; // 传送带正常运行，开始装瓶
-                    else
-                        state_next = ERROR; // 传送带停止，报传送带错误
+                RUNNING: begin
+                    if (now_pills == target_pills) begin
+                        if (now_bottles == target_bottles)
+                            state_next = DONE; //装瓶完毕
+                        else 
+                            state_next = SWITCHING; //切换瓶
+                    end else if (hopper_timer == 0) begin
+                        state_next = ERROR; // 未收到漏斗信号，报缺料错误
+                    end
                 end
-            end
-            DONE: begin
-                if () // 接受任意按钮信号
-                    state_next = SETTING; // 复位
-            end
-            ERROR: begin
-                if () // 若恢复正常
-                    state_next = RUNNING; // 继续工作
-            end
-            FATAL: begin
-                if () // 接受任意按钮信号
-                    state_next = SETTING; // 复位
-            end
-        endcase
+                SWITCHING: begin
+                    if (switch_timer == 0) begin
+                        if () // 检测装药数量
+                            state_next = FATAL; // 装药数量异常，报超标严重错误
+                        else if (conveyor_signal)
+                            state_next = RUNNING; // 传送带正常运行，开始装瓶
+                        else
+                            state_next = ERROR; // 传送带停止，报传送带错误
+                    end
+                end
+                DONE: begin
+                    if () // 接受任意按钮信号
+                        state_next = SETTING; // 复位
+                end
+                ERROR: begin
+                    if (conveyor_signal || hopper_timer != 0) // 若恢复正常
+                        state_next = RUNNING; // 继续工作
+                end
+                FATAL: begin
+                    if () // 接受任意按钮信号
+                        state_next = SETTING; // 复位
+                end
+            endcase
+        end
     end
     
     // 时序逻辑负责处理和转移
@@ -156,12 +160,13 @@ module main(
                     SETTING: begin
                     end
                     RUNNING: begin
-                        // 进入运行态，计数器清零
+                        // 进入运行态，计数器清零，蜂鸣器短鸣
                     end
                     SWITCHING: begin
                         // 进入切换态，设置切换计时器2s
                     end
                     DONE: begin
+                        
                     end
                     ERROR: begin
                     end
@@ -203,11 +208,11 @@ module main(
 
     // 调试显示
     assign display_1 = state;
-    assign display_2 = 4'h2;
-    assign display_3 = 4'h3;
-    assign display_4 = 4'h4;
-    assign display_5 = 4'h5;
-    assign display_6 = 4'h6;
+    assign display_2 = state == SETTING ? target_pills1 : now_pills1;
+    assign display_3 = state == SETTING ? target_pills2 : now_pills2;
+    assign display_4 = state == SETTING ? target_pills3 : now_pills3;
+    assign display_5 = state == SETTING ? target_bottles1 : now_bottles1;
+    assign display_6 = state == SETTING ? target_bottles2 : now_bottles2;
 
     reg [0:5] flicker_mask;
 
@@ -240,12 +245,12 @@ module main(
     // ==========================================
     // 蜂鸣器部分
     // ==========================================
-    reg [4:0] beep_timer;
-    assign beep_always;
+    reg [4:0] beep_timer; // 蜂鸣器计时器(单位：250ms)
+    assign beep_always = state == DONE;
     assign beep_2hz = state == ERROR;
     assign beep_4hz = state == FATAL;
     
-    always @(clk_timer) begin
+    always @(clk_4hz) begin
         if (beep_timer != 0)
             beep_timer <= beep_timer - 1;
     end
