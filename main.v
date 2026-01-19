@@ -46,16 +46,16 @@ module main(
     reg clk_timer; // 计时器时钟，用于切换计时器和漏斗计时器
 
     always @(posedge clk_1khz) begin
-        if (cnt1k == 100-1) begin
+        if (cnt1k == 1000-1) begin
             cnt1k <= 0;
             clk_timer <= ~clk_timer;
         end else
             cnt1k <= cnt1k + 1;
         
-        if (cnt1k == 0 || cnt1k == 50)
+        if (cnt1k == 0 || cnt1k == 500)
             clk_2hz <= ~clk_2hz;
         
-        if (cnt1k == 0 || cnt1k == 25 || cnt1k == 50 || cnt1k == 75)
+        if (cnt1k == 0 || cnt1k == 250 || cnt1k == 500 || cnt1k == 750)
             clk_4hz <= ~clk_4hz;
     end
 
@@ -76,6 +76,9 @@ module main(
     reg [3:0] now_bottles1; // 已经完成的瓶数 0~99 个位
     reg [3:0] now_bottles2; // 已经完成的瓶数 0~99 十位
 
+    // 临时变量：用于在一个时钟周期内计算“下一值”，避免用旧值比较引发的越界问题
+    reg [3:0] np1, np2, np3, nb1, nb2;
+    
     // 状态定义：上电进入 SETTING，按 btn3 确认进入 RUNNING，达到目标瓶数进入 DONE
     localparam SETTING = 2'd0;
     localparam RUNNING = 2'd1;
@@ -86,7 +89,6 @@ module main(
 
 
     // 目标/当前数值仍保持每位寄存器表示（便于数码管显示）
-    // 已移除漏斗上升沿检测（测试时不使用）
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr) begin
             state <= SETTING;
@@ -128,39 +130,49 @@ module main(
             else if (state == RUNNING) begin
                 // 测试用：按 btn2 手动增加药片计数（用于验证计数逻辑）
                 if (btn2_pressed) begin
-                    // 增加药片计数（逐位进位）
-                    if (now_pills1 == 9) begin
-                        now_pills1 <= 0;
-                        if (now_pills2 == 9) begin
-                            now_pills2 <= 0;
-                            if (now_pills3 == 9) now_pills3 <= 0;
-                            else now_pills3 <= now_pills3 + 1'b1;
-                        end else now_pills2 <= now_pills2 + 1'b1;
-                    end else now_pills1 <= now_pills1 + 1'b1;
+                    // 使用临时变量先计算下一值（阻塞赋值风格），最后一次性写回寄存器（非阻塞）
+                    np1 = now_pills1;
+                    np2 = now_pills2;
+                    np3 = now_pills3;
+                    nb1 = now_bottles1;
+                    nb2 = now_bottles2;
 
-                    // 判断是否达到目标药片数（比较三位）
-                    if ((now_pills3 == target_pills3) && (now_pills2 == target_pills2) && (now_pills1 == target_pills1)) begin
-                        // 抵达目标：清药片计数，增加瓶数（逐位进位）
-                        now_pills1 <= 0; now_pills2 <= 0; now_pills3 <= 0;
-                        if (now_bottles1 == 9) begin
-                            now_bottles1 <= 0;
-                            now_bottles2 <= now_bottles2 + 1'b1;
-                        end else now_bottles1 <= now_bottles1 + 1'b1;
+                    // 逐位进位（计算 next_pills）
+                    if (np1 == 4'd9) begin
+                        np1 = 4'd0;
+                        if (np2 == 4'd9) begin
+                            np2 = 4'd0;
+                            if (np3 == 4'd9) np3 = 4'd0;
+                            else np3 = np3 + 1'b1;
+                        end else np2 = np2 + 1'b1;
+                    end else np1 = np1 + 1'b1;
 
-                        // 检查是否达到目标瓶数，达到则进入 DONE
-                        if ((now_bottles2 == target_bottles2) && (now_bottles1 == target_bottles1)) begin
-                            // 达到目标瓶数 -> 完成
+                    // 如果 next_pills 到达目标，则清零 pills 并增加瓶数（计算 next_bottles）
+                    if ((np3 == target_pills3) && (np2 == target_pills2) && (np1 == target_pills1)) begin
+                        np1 = 4'd0; np2 = 4'd0; np3 = 4'd0;
+                        if (nb1 == 4'd9) begin
+                            nb1 = 4'd0;
+                            nb2 = nb2 + 1'b1;
+                        end else nb1 = nb1 + 1'b1;
+
+                        // 如果 next_bottles 达到目标，立即设置完成状态
+                        if ((nb2 == target_bottles2) && (nb1 == target_bottles1)) begin
                             state <= DONE;
                         end
                     end
-                end
 
-                
+                    // 一次性更新寄存器，避免因非阻塞赋值导致比较基于旧值的问题
+                    now_pills1 <= np1;
+                    now_pills2 <= np2;
+                    now_pills3 <= np3;
+                    now_bottles1 <= nb1;
+                    now_bottles2 <= nb2;
+                end
             end
             // 完成态：短按 btn3 返回设置模式（重置当前计数）
             else if (state == DONE) begin
                 if (btn_3) begin
-                    state <= SETTING;
+                    state <= RUNNING;
                     now_pills1 <= 0; now_pills2 <= 0; now_pills3 <= 0;
                     now_bottles1 <= 0; now_bottles2 <= 0;
                 end
@@ -174,8 +186,6 @@ module main(
     // ==========================================
     // 修改 display_1 ~ display_6 的值即可修改显示内容
     // 修改 flicker_mask[0...5] 的值即可启动/关闭闪烁
-
-
   
     wire [3:0] display_2 = (state == SETTING) ? target_pills1   : now_pills1;
     wire [3:0] display_3 = (state == SETTING) ? target_pills2   : now_pills2;
