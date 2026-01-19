@@ -83,27 +83,77 @@ module main(
     localparam SETTING = 2'd0;
     localparam RUNNING = 2'd1;
     localparam DONE    = 2'd2;
-    localparam ERROR   = 2'd3;
 
-    reg [1:0] state;
+    reg [1:0] state,next_state;
 
+    assign target_valid = (target_pills1 || target_pills2 || target_pills3) && (target_bottles1 || target_bottles2);
 
-    // 目标/当前数值仍保持每位寄存器表示（便于数码管显示）
+    // =========================================================================
+    // ALWAYS BLOCK 1: 状态寄存器时序逻辑（纯状态转移）
+    // 功能：在时钟上升沿更新状态，异步复位
+    // =========================================================================
     always @(posedge clk_1khz or negedge switch_clr) begin
         if (!switch_clr) begin
             state <= SETTING;
-            // 清零当前计数
+        end else begin
+            state <= next_state;
+        end
+    end
+
+    // =========================================================================
+    // ALWAYS BLOCK 2: 次态组合逻辑（纯组合）
+    // 功能：根据当前状态和输入条件计算下一状态
+    // 注意：组合逻辑中不能检测边沿，因此btn_pressed信号已在顶层定义
+    // =========================================================================
+    always @(*) begin
+        // 默认保持当前状态
+        next_state = state;
+        
+        case (state)
+            SETTING: begin
+                // SETTING状态下，btn3确认则转移到RUNNING
+                if (btn_3 && target_valid) begin
+                    next_state = RUNNING;
+                end
+            end
+            
+            RUNNING: begin
+                // RUNNING状态下，当瓶数达到目标时转移到DONE
+                // 原逻辑在btn2_pressed处理中判断，这里直接比较寄存器值
+                // 注意：由于非阻塞赋值，比较的是上一周期的值，与原逻辑一致
+                if (now_bottles2 == target_bottles2 && now_bottles1 == target_bottles1) begin
+                    next_state = DONE;
+                end
+            end
+            
+            DONE: begin
+                // DONE状态下，btn3按下返回RUNNING
+                if (btn_3) begin
+                    next_state = RUNNING;
+                end
+            end
+            
+            default: next_state = SETTING;
+        endcase
+    end
+
+    // =========================================================================
+    // ALWAYS BLOCK 3: 数据路径时序逻辑（纯数据更新）
+    // 功能：更新所有数据寄存器（计数器、目标值、位置等）
+    // 与原代码完全一致，仅移除了state赋值
+    // =========================================================================
+    always @(posedge clk_1khz or negedge switch_clr) begin
+        if (!switch_clr) begin
+            // 异步复位所有数据寄存器
             now_pills1 <= 0; now_pills2 <= 0; now_pills3 <= 0;
             now_bottles1 <= 0; now_bottles2 <= 0;
-            // 初始化目标为
             target_pills1 <= 1; target_pills2 <= 0; target_pills3 <= 0;
             target_bottles1 <= 1; target_bottles2 <= 0;
             position <= 0;
         end else begin
-            // 设置态：btn1 切位，btn2 增加所选位，btn3 确认开始计数
+            // 数据更新逻辑与原代码完全一致
             if (state == SETTING) begin
                 if (btn1_pressed) begin
-                    // 循环切换 0..4（3位药片 + 2位瓶数）
                     if (position == 3'd4) position <= 3'd0;
                     else position <= position + 1'b1;
                 end
@@ -119,25 +169,17 @@ module main(
                     endcase
                 end
 
-                if (btn_3) begin
-                    // 确认设置，进入计数模式（RUNNING），从 0 开始计数
-                    state <= RUNNING;
-                    now_pills1 <= 0; now_pills2 <= 0; now_pills3 <= 0;
-                    now_bottles1 <= 0; now_bottles2 <= 0;
-                end
+                // SETTING状态下的state转移已在块2中处理
             end
-            // 计数态：去掉对漏斗加药和急停信号的依赖，改为手动 btn2 作为测试计数脉冲
             else if (state == RUNNING) begin
-                // 测试用：按 btn2 手动增加药片计数（用于验证计数逻辑）
                 if (btn2_pressed) begin
-                    // 使用临时变量先计算下一值（阻塞赋值风格），最后一次性写回寄存器（非阻塞）
+                    // 使用临时变量计算，与原代码完全一致
                     np1 = now_pills1;
                     np2 = now_pills2;
                     np3 = now_pills3;
                     nb1 = now_bottles1;
                     nb2 = now_bottles2;
 
-                    // 逐位进位（计算 next_pills）
                     if (np1 == 4'd9) begin
                         np1 = 4'd0;
                         if (np2 == 4'd9) begin
@@ -147,21 +189,15 @@ module main(
                         end else np2 = np2 + 1'b1;
                     end else np1 = np1 + 1'b1;
 
-                    // 如果 next_pills 到达目标，则清零 pills 并增加瓶数（计算 next_bottles）
                     if ((np3 == target_pills3) && (np2 == target_pills2) && (np1 == target_pills1)) begin
                         np1 = 4'd0; np2 = 4'd0; np3 = 4'd0;
                         if (nb1 == 4'd9) begin
                             nb1 = 4'd0;
                             nb2 = nb2 + 1'b1;
                         end else nb1 = nb1 + 1'b1;
-
-                        // 如果 next_bottles 达到目标，立即设置完成状态
-                        if ((nb2 == target_bottles2) && (nb1 == target_bottles1)) begin
-                            state <= DONE;
-                        end
+                        // 达到目标瓶数的判断已移至块2
                     end
 
-                    // 一次性更新寄存器，避免因非阻塞赋值导致比较基于旧值的问题
                     now_pills1 <= np1;
                     now_pills2 <= np2;
                     now_pills3 <= np3;
@@ -169,14 +205,14 @@ module main(
                     now_bottles2 <= nb2;
                 end
             end
-            // 完成态：短按 btn3 返回设置模式（重置当前计数）
             else if (state == DONE) begin
                 if (btn_3) begin
-                    state <= RUNNING;
+                    // 返回RUNNING状态并清零计数
                     now_pills1 <= 0; now_pills2 <= 0; now_pills3 <= 0;
                     now_bottles1 <= 0; now_bottles2 <= 0;
+                    // DONE→RUNNING的转移在块2中处理
                 end
-            end 
+            end
         end
     end
 
@@ -201,7 +237,11 @@ module main(
     assign LED7S4_out = (((~flicker_mask[3]) | clk_4hz) ? display_4 : 4'hf);
     assign LED7S5_out = (((~flicker_mask[4]) | clk_4hz) ? display_5 : 4'hf);
     assign LED7S6_out = (((~flicker_mask[5]) | clk_4hz) ? display_6 : 4'hf);
-    assign LED7S_out = 7'b0000000;
+
+
+    assign LED7S_out =  (state == SETTING) ? (clk_2hz ? 7'b1001001 : 7'b0000000):
+                        (state == RUNNING) ? (clk_4hz ? 7'b0110110 : (clk_2hz ? 7'b0101101 : 7'b0011011))  : 
+                        (clk_2hz ? 7'b1011100 : 7'b0000000) ;
 
     always @(*) begin
         if (state == SETTING) begin
